@@ -20,6 +20,10 @@ from datetime import date
 import random
 from docxtpl import DocxTemplate
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env file immediately
+load_dotenv()
 
 # Import custom modules
 from state_manager import SimulationStateManager
@@ -69,6 +73,18 @@ GEMINI_API_KEY = get_secret("GEMINI_API_KEY")
 AIRTABLE_API_KEY = get_secret("AIRTABLE_PAT")  # Note: Streamlit uses AIRTABLE_PAT
 AIRTABLE_BASE_ID = get_secret("AIRTABLE_BASE_ID")
 AIRTABLE_TABLE_NAME = get_secret("AIRTABLE_TABLE_NAME", "Cases")
+
+# Validate API keys at startup
+if not GEMINI_API_KEY or GEMINI_API_KEY == "your_gemini_api_key_here":
+    st.error(
+        "❌ **Gemini API Key Missing or Invalid**\n\n"
+        "To fix this:\n"
+        "1. Get your API key from: https://aistudio.google.com/app/apikey\n"
+        "2. Edit `.env` file in your project root\n"
+        "3. Replace `GEMINI_API_KEY=your_gemini_api_key_here` with your actual key\n"
+        "4. Restart Streamlit"
+    )
+    st.stop()
 
 # Template file path
 TEMPLATE_PATH = Path(__file__).parent / "Simulation Case Template_2025.docx"
