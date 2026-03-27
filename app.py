@@ -582,13 +582,19 @@ def sync_case_to_airtable(case_data: Dict[str, Any], diagnosis: str,
         # Initialize client
         client = AirtableClient(AIRTABLE_API_KEY, AIRTABLE_BASE_ID)
         
-        # Prepare record
+        # Prepare record with proper data types
+        # Age should be a number, not a string
+        try:
+            age_value = int(case_data.get("age") or 0)
+        except (ValueError, TypeError):
+            age_value = None
+        
         record = {
             "Case Name": case_data.get("case_name", "Untitled Case"),
             "Diagnosis": diagnosis,
             "Target Learner": target_learner,
             "Difficulty": case_data.get("difficulty", "Unknown"),
-            "Age": str(case_data.get("age", "N/A")),
+            "Age": age_value,  # Send as integer, not string
             "Gender": case_data.get("gender", "Unspecified"),
             "Case JSON": json.dumps(case_data)
         }
