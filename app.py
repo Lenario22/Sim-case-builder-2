@@ -499,11 +499,11 @@ def generate_case_with_gemini(diagnosis: str, age: int, gender: str,
     Return ONLY a valid JSON object that fills this exact skeleton: {json.dumps(case_skeleton)}
 
     CRITICAL FORMATTING RULES:
-    1. NO double quotes (") in text values — use single quotes (') only
-    2. Replace all line breaks with \\n (NO actual newlines)
+    1. If a string value must contain a double quote, escape it with a backslash: \"
+    2. Use \\n for line breaks within string values — NO literal newlines inside strings
     3. Lab values (CBC, BMP, LFTs) MUST be numeric only (no units)
     4. Create dynamic 5-state branching: worse if interventions missed, better if done
-    5. Ensure critical_actions and debrief_questions are non-empty
+    5. Ensure critical_actions and debrief_questions are non-empty arrays, never empty strings
 
     Ensure clinical accuracy and scenario completeness for {ccs5.label}.
     """

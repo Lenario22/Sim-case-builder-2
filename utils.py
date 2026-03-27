@@ -388,24 +388,83 @@ def clean_data_structure(data: Any) -> Any:
 
 def validate_json_string(json_string: str) -> tuple[bool, Union[Dict, str]]:
     """
-    Validate and parse a JSON string with helpful error messages.
-    
-    Args:
-        json_string: Raw JSON string to parse
-        
+    Parse a JSON string with multi-strategy recovery for common LLM output issues.
+
+    Strategies tried in order:
+      1. Direct parse (fast path for clean responses)
+      2. BOM removal + markdown fence stripping
+      3. Regex extraction of the outermost { ... } object
+      4. Trailing-comma removal (e.g. {"k":"v",} is invalid JSON)
+      5. JavaScript comment stripping (// and /* */)
+
     Returns:
         Tuple of (is_valid, parsed_dict_or_error_message)
     """
-    # Remove markdown code block markers if present
-    cleaned = json_string.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.strip("`").strip()
-        if cleaned.lower().startswith("json"):
-            cleaned = cleaned[4:].strip()
-    
+    # --- Strategy 1: fast path ---
     try:
-        parsed = json.loads(cleaned)
-        return True, parsed
+        return True, json.loads(json_string)
+    except json.JSONDecodeError:
+        pass
+
+    # All remaining strategies work on a progressively cleaned string.
+    cleaned = json_string.strip().lstrip('\ufeff')  # strip BOM
+
+    # --- Strategy 2: strip markdown code fences ---
+    fence_match = re.search(r'```(?:json)?\s*([\s\S]*?)```', cleaned, re.IGNORECASE)
+    if fence_match:
+        cleaned = fence_match.group(1).strip()
+    elif cleaned.startswith('```'):
+        cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'\s*```$', '', cleaned)
+        cleaned = cleaned.strip()
+
+    try:
+        return True, json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # --- Strategy 3: extract the outermost JSON object via brace matching ---
+    start = cleaned.find('{')
+    if start != -1:
+        depth = 0
+        in_string = False
+        escape_next = False
+        end = start
+        for i, ch in enumerate(cleaned[start:], start):
+            if escape_next:
+                escape_next = False
+                continue
+            if ch == '\\' and in_string:
+                escape_next = True
+                continue
+            if ch == '"' and not escape_next:
+                in_string = not in_string
+            if not in_string:
+                if ch == '{':
+                    depth += 1
+                elif ch == '}':
+                    depth -= 1
+                    if depth == 0:
+                        end = i
+                        break
+        candidate = cleaned[start:end + 1]
+        try:
+            return True, json.loads(candidate)
+        except json.JSONDecodeError:
+            cleaned = candidate  # use this tighter candidate for further repair
+
+    # --- Strategy 4: remove trailing commas before } or ] ---
+    repaired = re.sub(r',\s*([}\]])', r'\1', cleaned)
+    try:
+        return True, json.loads(repaired)
+    except json.JSONDecodeError:
+        pass
+
+    # --- Strategy 5: strip JavaScript-style comments ---
+    no_comments = re.sub(r'//[^\n]*', '', repaired)
+    no_comments = re.sub(r'/\*[\s\S]*?\*/', '', no_comments)
+    try:
+        return True, json.loads(no_comments)
     except json.JSONDecodeError as e:
         error_msg = f"JSON Parse Error at line {e.lineno}, column {e.colno}: {e.msg}"
         return False, error_msg
