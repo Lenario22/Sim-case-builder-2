@@ -52,12 +52,21 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Load configuration from environment variables
+# Load configuration from environment variables (supports both local .env and Streamlit Secrets)
 # See .env.example for required setup
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY")
-AIRTABLE_BASE_ID = os.getenv("AIRTABLE_BASE_ID")
-AIRTABLE_TABLE_NAME = os.getenv("AIRTABLE_TABLE_NAME", "Cases")
+# On Streamlit Cloud: Use Settings → Secrets tab to add keys
+# Locally: Use .env file
+def get_secret(key: str, default: str = None) -> Optional[str]:
+    """Get secret from Streamlit secrets (Cloud) or environment variables (local)"""
+    try:
+        return st.secrets[key]
+    except (KeyError, TypeError):
+        return os.getenv(key, default)
+
+GEMINI_API_KEY = get_secret("GEMINI_API_KEY")
+AIRTABLE_API_KEY = get_secret("AIRTABLE_PAT")  # Note: Streamlit uses AIRTABLE_PAT
+AIRTABLE_BASE_ID = get_secret("AIRTABLE_BASE_ID")
+AIRTABLE_TABLE_NAME = get_secret("AIRTABLE_TABLE_NAME", "Cases")
 
 # Template file path
 TEMPLATE_PATH = Path(__file__).parent / "Simulation Case Template_2025.docx"
