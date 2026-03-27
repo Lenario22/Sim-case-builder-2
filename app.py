@@ -632,6 +632,170 @@ def export_to_word(case_data: Dict[str, Any], diagnosis: str) -> Optional[io.Byt
 
 
 # ============================================================================
+# CASE DISPLAY FUNCTION
+# ============================================================================
+
+def display_case_content(case_data: Dict[str, Any], final_diagnosis: str, 
+                        form_data: Dict[str, Any], validation_summary: str = None) -> None:
+    """
+    Display generated case content, complexity profile, branching states, and export options.
+    Called after generation or on reruns when case exists in session state.
+    
+    Args:
+        case_data: The complete case dictionary
+        final_diagnosis: The diagnosis for the case
+        form_data: Form data dictionary (for target_learner)
+        validation_summary: Optional validation summary (if not provided, will be recomputed)
+    """
+    # Recompute validation if not provided
+    if validation_summary is None:
+        validator = CaseValidator()
+        is_valid, validation_results = validator.validate_complete_case(case_data)
+        validation_summary = validator.get_validation_summary()
+    else:
+        # Assume is_valid if summary exists
+        is_valid = True
+        validation_results = []
+    
+    st.markdown("---")
+    st.markdown("## 📊 Case Summary & Validation")
+
+    # Show case summary
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        st.markdown(generate_case_summary(case_data))
+    with col2:
+        st.metric("Clinical Completeness",
+                 "✓ Valid" if is_valid else "✗ Incomplete")
+
+    # Show validation results
+    st.markdown("### Validation Report")
+    render_validation_results(validation_summary)
+
+    # -------- COMPLEXITY PROFILE --------
+    st.markdown("---")
+    st.markdown("## 🧠 Complexity Profile")
+    complexity_profile = st.session_state.get("complexity_profile", {})
+    if complexity_profile:
+        render_complexity_profile(complexity_profile)
+    else:
+        st.info("ℹ️ Complexity profile not available (case generated with legacy path). Re-generate to see Vector Model, CCFs, and CoT analysis.")
+
+    # -------- PATIENT STATE PROGRESSION (tabbed branching view) --------
+    st.markdown("---")
+    st.markdown("## 🔀 Patient State Progression")
+    state_tabs = st.tabs(["State 1", "State 2", "State 3", "State 4", "State 5"])
+    state_keys = [("s1", "Arrival / Initial Presentation"),
+                  ("s2", "Early Changes"),
+                  ("s3", "Critical Decision Point"),
+                  ("s4", "Response to Treatment"),
+                  ("s5", "Resolution or Escalation")]
+    for tab, (prefix, label) in zip(state_tabs, state_keys):
+        with tab:
+            st.markdown(f"**{label}** — {case_data.get(f'{prefix}_name', '')}")
+            vitals_col, pe_col = st.columns(2)
+            with vitals_col:
+                st.markdown("**Vital Signs**")
+                st.info(case_data.get(f"{prefix}_vitals", "—"))
+            with pe_col:
+                st.markdown("**Physical Exam**")
+                st.info(case_data.get(f"{prefix}_pe", "—"))
+
+            prog_text = case_data.get(f"{prefix}_prog", "")
+            notes_text = case_data.get(f"{prefix}_notes", "")
+            actions_text = case_data.get(f"{prefix}_actions", "")
+
+            pos_col, neg_col = st.columns(2)
+            with pos_col:
+                st.markdown(
+                    "<span style='color:#2e7d32; font-weight:bold;'>✅ Positive Path (Intervention Performed)</span>",
+                    unsafe_allow_html=True
+                )
+                # Extract positive path from prog notes if present
+                positive_text = ""
+                if prog_text:
+                    lines = prog_text.split("\\n")
+                    pos_lines = [l for l in lines if any(
+                        kw in l.lower() for kw in ["improve", "good", "stable", "respond", "positive", "treated"]
+                    )]
+                    positive_text = "\n".join(pos_lines) if pos_lines else prog_text
+                st.success(positive_text or actions_text or "—")
+
+            with neg_col:
+                st.markdown(
+                    "<span style='color:#c62828; font-weight:bold;'>❌ Negative Path (No Intervention)</span>",
+                    unsafe_allow_html=True
+                )
+                negative_text = ""
+                if prog_text:
+                    lines = prog_text.split("\\n")
+                    neg_lines = [l for l in lines if any(
+                        kw in l.lower() for kw in ["deteriorat", "declin", "worsen", "worse", "negative", "untreated", "fail"]
+                    )]
+                    negative_text = "\n".join(neg_lines) if neg_lines else ""
+                st.error(negative_text or notes_text or "—")
+    
+    # -------- STAGE 4: EXPORT & SYNC --------
+    st.markdown("---")
+    st.markdown("## 💾 Export & Integration")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        # Word export
+        word_file = export_to_word(case_data, final_diagnosis)
+        if word_file:
+            st.download_button(
+                label="⬇️ Download Word Document",
+                data=word_file,
+                file_name=f"{final_diagnosis.replace(' ', '_')}_Case.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True
+            )
+    
+    with col2:
+        # Airtable sync
+        if st.button("📤 Sync to Airtable", use_container_width=True):
+            sync_case_to_airtable(case_data, final_diagnosis,
+                                 form_data["target_learner"])
+    
+    with col3:
+        # JSON export
+        case_json = json.dumps(case_data, indent=2, default=str)
+        st.download_button(
+            label="📋 Export as JSON",
+            data=case_json,
+            file_name=f"{final_diagnosis.replace(' ', '_')}_Case.json",
+            mime="application/json",
+            use_container_width=True
+        )
+    
+    # -------- ADVANCED DEBUG PANEL --------
+    with st.expander("🔍 Advanced: Full Case Data & Debug"):
+        tab1, tab2, tab3 = st.tabs(["Raw JSON", "Validation Log", "Generation Log"])
+        
+        with tab1:
+            st.json(case_data)
+        
+        with tab2:
+            if validation_results:
+                for result in validation_results:
+                    color = "🟢" if result.severity == "info" \
+                           else "🟡" if result.severity == "warning" else "🔴"
+                    st.write(f"{color} **{result.field_name}**: {result.message}")
+            else:
+                st.info("No validation issues found")
+        
+        with tab3:
+            gen_log = state_mgr.get_generation_log()
+            if gen_log:
+                for event in gen_log:
+                    st.write(f"⏱ {event['timestamp']}: {event['message']}")
+            else:
+                st.info("No generation log available")
+
+
+# ============================================================================
 # MAIN APPLICATION FLOW
 # ============================================================================
 
@@ -646,7 +810,18 @@ def main():
     with st.form("case_input_form", border=False):
         form_data = render_configuration_form()
     
-    if not form_data["submitted"]:
+    # Check if form was just submitted OR if we already have a case in session state
+    # (to preserve display when user clicks buttons and page reruns)
+    has_case = bool(state_mgr.get_case_data())
+    if not form_data["submitted"] and not has_case:
+        return
+    
+    # If form not submitted but we have a case, skip generation and jump to display
+    if not form_data["submitted"] and has_case:
+        case_data = state_mgr.get_case_data()
+        final_diagnosis = case_data.get("diagnosis", "Unknown")
+        # Jump directly to STAGE 3: DISPLAY & VALIDATION (line ~730)
+        display_case_content(case_data, final_diagnosis, form_data)
         return
     
     # -------- STAGE 1: PRE-GENERATION --------
@@ -726,137 +901,9 @@ def main():
         # -------- STAGE 3: DISPLAY & VALIDATION --------
         state_mgr.apply_state_transition("generating", "generated",
                                         "Case generated and validated")
-
-        st.markdown("---")
-        st.markdown("## 📊 Case Summary & Validation")
-
-        # Show case summary
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            st.markdown(generate_case_summary(case_data))
-        with col2:
-            st.metric("Clinical Completeness",
-                     "✓ Valid" if is_valid else "✗ Incomplete")
-
-        # Show validation results
-        st.markdown("### Validation Report")
-        render_validation_results(validation_summary)
-
-        # -------- COMPLEXITY PROFILE --------
-        st.markdown("---")
-        st.markdown("## 🧠 Complexity Profile")
-        complexity_profile = st.session_state.get("complexity_profile", {})
-        if complexity_profile:
-            render_complexity_profile(complexity_profile)
-        else:
-            st.info("ℹ️ Complexity profile not available (case generated with legacy path). Re-generate to see Vector Model, CCFs, and CoT analysis.")
-
-        # -------- PATIENT STATE PROGRESSION (tabbed branching view) --------
-        st.markdown("---")
-        st.markdown("## 🔀 Patient State Progression")
-        state_tabs = st.tabs(["State 1", "State 2", "State 3", "State 4", "State 5"])
-        state_keys = [("s1", "Arrival / Initial Presentation"),
-                      ("s2", "Early Changes"),
-                      ("s3", "Critical Decision Point"),
-                      ("s4", "Response to Treatment"),
-                      ("s5", "Resolution or Escalation")]
-        for tab, (prefix, label) in zip(state_tabs, state_keys):
-            with tab:
-                st.markdown(f"**{label}** — {case_data.get(f'{prefix}_name', '')}")
-                vitals_col, pe_col = st.columns(2)
-                with vitals_col:
-                    st.markdown("**Vital Signs**")
-                    st.info(case_data.get(f"{prefix}_vitals", "—"))
-                with pe_col:
-                    st.markdown("**Physical Exam**")
-                    st.info(case_data.get(f"{prefix}_pe", "—"))
-
-                prog_text = case_data.get(f"{prefix}_prog", "")
-                notes_text = case_data.get(f"{prefix}_notes", "")
-                actions_text = case_data.get(f"{prefix}_actions", "")
-
-                pos_col, neg_col = st.columns(2)
-                with pos_col:
-                    st.markdown(
-                        "<span style='color:#2e7d32; font-weight:bold;'>✅ Positive Path (Intervention Performed)</span>",
-                        unsafe_allow_html=True
-                    )
-                    # Extract positive path from prog notes if present
-                    positive_text = ""
-                    if prog_text:
-                        lines = prog_text.split("\\n")
-                        pos_lines = [l for l in lines if any(
-                            kw in l.lower() for kw in ["improve", "good", "stable", "respond", "positive", "treated"]
-                        )]
-                        positive_text = "\n".join(pos_lines) if pos_lines else prog_text
-                    st.success(positive_text or actions_text or "—")
-
-                with neg_col:
-                    st.markdown(
-                        "<span style='color:#c62828; font-weight:bold;'>❌ Negative Path (No Intervention)</span>",
-                        unsafe_allow_html=True
-                    )
-                    negative_text = ""
-                    if prog_text:
-                        lines = prog_text.split("\\n")
-                        neg_lines = [l for l in lines if any(
-                            kw in l.lower() for kw in ["deteriorat", "declin", "worsen", "worse", "negative", "untreated", "fail"]
-                        )]
-                        negative_text = "\n".join(neg_lines) if neg_lines else ""
-                    st.error(negative_text or notes_text or "—")
         
-        # -------- STAGE 4: EXPORT & SYNC --------
-        st.markdown("---")
-        st.markdown("## 💾 Export & Integration")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            # Word export
-            word_file = export_to_word(case_data, final_diagnosis)
-            if word_file:
-                st.download_button(
-                    label="⬇️ Download Word Document",
-                    data=word_file,
-                    file_name=f"{final_diagnosis.replace(' ', '_')}_Case.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    use_container_width=True
-                )
-        
-        with col2:
-            # Airtable sync
-            if st.button("📤 Sync to Airtable", use_container_width=True):
-                sync_case_to_airtable(case_data, final_diagnosis,
-                                     form_data["target_learner"])
-        
-        with col3:
-            # JSON export
-            case_json = json.dumps(case_data, indent=2, default=str)
-            st.download_button(
-                label="📋 Export as JSON",
-                data=case_json,
-                file_name=f"{final_diagnosis.replace(' ', '_')}_Case.json",
-                mime="application/json",
-                use_container_width=True
-            )
-        
-        # -------- ADVANCED DEBUG PANEL --------
-        with st.expander("🔍 Advanced: Full Case Data & Debug"):
-            tab1, tab2, tab3 = st.tabs(["Raw JSON", "Validation Log", "Generation Log"])
-            
-            with tab1:
-                st.json(case_data)
-            
-            with tab2:
-                for result in validation_results:
-                    color = "🟢" if result.severity == "info" \
-                           else "🟡" if result.severity == "warning" else "🔴"
-                    st.write(f"{color} **{result.field_name}**: {result.message}")
-            
-            with tab3:
-                gen_log = state_mgr.get_generation_log()
-                for event in gen_log:
-                    st.write(f"⏱ {event['timestamp']}: {event['message']}")
+        # Display case content and export options
+        display_case_content(case_data, final_diagnosis, form_data, validation_summary)
         
         # Success state
         state_mgr.apply_state_transition("generated", "exported",
