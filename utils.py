@@ -53,26 +53,49 @@ def sanitize_template_noise(text: str) -> str:
 
 def apply_dka_ua_logic(case_data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Smart medical validation: enforce clinically accurate UA results for DKA.
+    Smart medical validation: enforce clinically accurate lab values by diagnosis.
 
-    Rule: If Blood_Glucose > 250 mg/dL AND pH < 7.30, UA ketones and glucose
+    DKA Rule: If Blood_Glucose > 250 mg/dL AND pH < 7.30, UA ketones and glucose
     MUST be Positive (4+). Overrides any 'Negative' values the AI may have set.
+    
+    MI Rule: Troponin should be elevated for symptomatic MI.
+    
+    Thyroid Rule: TSH and T4 should reflect the suspected thyroid condition.
 
     Args:
         case_data: Complete case dictionary.
 
     Returns:
-        case_data with corrected UA fields if the DKA criteria are met.
+        case_data with corrected lab fields based on clinical logic.
     """
+    diagnosis = case_data.get("case_name", "").upper()
+    
+    # -------- DKA Logic --------
     try:
         glucose = float(case_data.get("glu", 0) or case_data.get("glucose_arrive", 0) or 0)
         ph = float(case_data.get("vbg_ph", 7.40) or 7.40)
     except (ValueError, TypeError):
-        return case_data
+        glucose, ph = 0, 7.40
 
     if glucose > 250 and ph < 7.30:
-        case_data["ua_ket"] = "Positive (4+)"
+        case_data["ua_ketones"] = "Positive (4+)"
         case_data["ua_glu"] = "Positive (4+)"
+    
+    # -------- MI Logic (Cardiac Troponin) --------
+    if "MI" in diagnosis or "MYOCARDIAL" in diagnosis or "INFARCTION" in diagnosis:
+        # For MI, troponin should be elevated
+        troponin = case_data.get("troponin", "").lower().strip()
+        if not troponin or troponin == "pending" or troponin == "normal":
+            case_data["troponin"] = "Elevated (0.8 ng/mL)"
+    
+    # -------- Thyroid Logic --------
+    if "THYROID" in diagnosis or "HYPERTHYROID" in diagnosis or "HYPOTHYROID" in diagnosis:
+        if "HYPER" in diagnosis:
+            case_data["tsh"] = "Low (< 0.1 mIU/L)"
+            case_data["t4"] = "Elevated (15.2 ng/dL)"
+        else:  # Hypothyroid
+            case_data["tsh"] = "Elevated (8.5 mIU/L)"
+            case_data["t4"] = "Low (3.2 ng/dL)"
 
     return case_data
 
@@ -281,6 +304,10 @@ def auto_populate_section_7(case_data: Dict[str, Any]) -> Dict[str, Any]:
     
     case_data["critical_actions"] = critical_actions[:6]  # Cap at 6
     
+    # Format critical_actions as string for Word template
+    if isinstance(critical_actions, list):
+        case_data["critical_actions"] = "\n• ".join([str(a) for a in critical_actions if a]) if critical_actions else "Not specified"
+    
     # ====== DEBRIEF QUESTIONS ======
     debrief_questions = case_data.get("debrief_questions", [])
     
@@ -292,7 +319,17 @@ def auto_populate_section_7(case_data: Dict[str, Any]) -> Dict[str, Any]:
         
         debrief_questions = generate_diagnosis_debrief_questions(diagnosis, difficulty, target_learner)
     
-    case_data["debrief_questions"] = debrief_questions[:5]  # Cap at 5
+    debrief_questions = debrief_questions[:5]  # Cap at 5
+    
+    # Format debrief_questions as string for Word template
+    if isinstance(debrief_questions, list):
+        formatted_q = []
+        for i, q in enumerate(debrief_questions, 1):
+            if q:
+                formatted_q.append(f"{i}. {str(q)}")
+        case_data["debrief_questions"] = "\n".join(formatted_q) if formatted_q else "Not specified"
+    else:
+        case_data["debrief_questions"] = debrief_questions
     
     # ====== REFERENCES ======
     references = case_data.get("references", [])
@@ -305,7 +342,17 @@ def auto_populate_section_7(case_data: Dict[str, Any]) -> Dict[str, Any]:
         
         references = generate_clinical_references(diagnosis, organ_system, procedures)
     
-    case_data["references"] = references[:5]  # Cap at 5
+    references = references[:5]  # Cap at 5
+    
+    # Format references as string for Word template
+    if isinstance(references, list):
+        formatted_r = []
+        for i, r in enumerate(references, 1):
+            if r:
+                formatted_r.append(f"{i}. {str(r)}")
+        case_data["references"] = "\n".join(formatted_r) if formatted_r else "Not specified"
+    else:
+        case_data["references"] = references
     
     return case_data
 

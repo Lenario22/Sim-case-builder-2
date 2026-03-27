@@ -480,7 +480,8 @@ def generate_case_with_gemini(diagnosis: str, age: int, gender: str,
         "alk_phos": "", "t_bili": "", "lipase": "", "ca": "", "mg": "", "phos": "",
         "alb": "", "vbg_ph": "", "vbg_pco2": "", "vbg_po2": "", "vbg_hco3": "",
         "lactate": "", "ua_color": "", "ua_clarity": "", "ua_prot": "", "ua_glu": "",
-        "ua_ket": "", "critical_actions": ["", ""], "debrief_questions": ["", ""],
+        "ua_ketones": "", "troponin": "", "tsh": "", "t4": "",
+        "critical_actions": ["", ""], "debrief_questions": ["", ""],
         "references": ["", ""]
     }
     
