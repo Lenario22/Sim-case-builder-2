@@ -591,16 +591,34 @@ def sync_case_to_airtable(case_data: Dict[str, Any], diagnosis: str,
         
         record = {
             "Case Name": case_data.get("case_name", "Untitled Case"),
-            "Diagnosis": diagnosis,
-            "Target Learner": target_learner,
-            "Difficulty": case_data.get("difficulty", "Unknown"),
+            "Diagnosis": str(diagnosis),
+            "Target Learner": str(target_learner),
+            "Difficulty": str(case_data.get("difficulty", "Unknown")),
             "Age": age_value,  # Send as integer, not string
-            "Gender": case_data.get("gender", "Unspecified"),
+            "Gender": str(case_data.get("gender", "Unspecified")),
             "Case JSON": json.dumps(case_data)
         }
         
-        # Send to Airtable
+        # Remove None/empty values to avoid Airtable rejection
+        record = {k: v for k, v in record.items() if v is not None and v != ""}
+        
+        # Send to Airtable — if a Single Select field rejects the value,
+        # retry without that field rather than failing the whole sync.
         response = client.create_record(AIRTABLE_TABLE_NAME, record)
+        
+        if not response.success and "select option" in response.error_message.lower():
+            # A Single Select field doesn't have the option pre-configured.
+            # Strip the offending fields and retry with text-safe fields only.
+            select_fields = {"Target Learner", "Difficulty", "Gender", "Diagnosis"}
+            trimmed = {k: v for k, v in record.items() if k not in select_fields}
+            response = client.create_record(AIRTABLE_TABLE_NAME, trimmed)
+            if response.success:
+                st.info(
+                    "💡 Some select fields were skipped because the options "
+                    "aren't configured in Airtable yet. To fix: open your "
+                    "Airtable table, click the field header → Customize field, "
+                    "and change Single Select fields to 'Single line text'."
+                )
         
         if response.success:
             st.success(
