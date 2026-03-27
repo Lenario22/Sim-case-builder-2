@@ -60,7 +60,9 @@ def get_secret(key: str, default: str = None) -> Optional[str]:
     """Get secret from Streamlit secrets (Cloud) or environment variables (local)"""
     try:
         return st.secrets[key]
-    except (KeyError, TypeError):
+    except Exception:
+        # Catch any exception (KeyError, TypeError, StreamlitSecretNotFoundError, etc.)
+        # and fallback to environment variables
         return os.getenv(key, default)
 
 GEMINI_API_KEY = get_secret("GEMINI_API_KEY")
