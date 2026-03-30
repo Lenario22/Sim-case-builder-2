@@ -15,6 +15,7 @@ from logic_controller import (
     CCS5Level, VectorModel, VectorAxis, ComplexityProfile,
     TaskCCF, PatientCCF, UncertaintyType, CognitiveBias
 )
+from utils import robust_parse_json
 
 
 # ============================================================================
@@ -719,81 +720,9 @@ class CaseEngine:
     def _parse_json_response(self, text: str) -> Dict[str, Any]:
         """
         Parse JSON from a Gemini response with multi-strategy recovery.
-
-        Handles: BOM, markdown fences, text before/after JSON, trailing
-        commas, and JavaScript-style comments.
+        Delegates to the shared robust_parse_json() in utils.py.
         """
-        import re
-
-        # --- Strategy 1: fast path ---
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
-
-        cleaned = text.strip().lstrip('\ufeff')
-
-        # --- Strategy 2: strip markdown code fences ---
-        fence_match = re.search(r'```(?:json)?\s*([\s\S]*?)```', cleaned, re.IGNORECASE)
-        if fence_match:
-            cleaned = fence_match.group(1).strip()
-        elif cleaned.startswith('```'):
-            cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned, flags=re.IGNORECASE)
-            cleaned = re.sub(r'\s*```$', '', cleaned)
-            cleaned = cleaned.strip()
-
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            pass
-
-        # --- Strategy 3: extract the outermost JSON object via brace matching ---
-        start = cleaned.find('{')
-        if start != -1:
-            depth = 0
-            in_string = False
-            escape_next = False
-            end = start
-            for i, ch in enumerate(cleaned[start:], start):
-                if escape_next:
-                    escape_next = False
-                    continue
-                if ch == '\\' and in_string:
-                    escape_next = True
-                    continue
-                if ch == '"':
-                    in_string = not in_string
-                if not in_string:
-                    if ch == '{':
-                        depth += 1
-                    elif ch == '}':
-                        depth -= 1
-                        if depth == 0:
-                            end = i
-                            break
-            candidate = cleaned[start:end + 1]
-            try:
-                return json.loads(candidate)
-            except json.JSONDecodeError:
-                cleaned = candidate
-
-        # --- Strategy 4: remove trailing commas ---
-        repaired = re.sub(r',\s*([}\]])', r'\1', cleaned)
-        try:
-            return json.loads(repaired)
-        except json.JSONDecodeError:
-            pass
-
-        # --- Strategy 5: strip JavaScript-style comments ---
-        no_comments = re.sub(r'//[^\n]*', '', repaired)
-        no_comments = re.sub(r'/\*[\s\S]*?\*/', '', no_comments)
-        try:
-            return json.loads(no_comments)
-        except json.JSONDecodeError as e:
-            raise ValueError(
-                f"JSON parsing failed after all recovery strategies: {e.msg} "
-                f"at line {e.lineno}, col {e.colno}"
-            )
+        return robust_parse_json(text)
 
     def _log(self, message: str) -> None:
         """Append a message to the generation log."""

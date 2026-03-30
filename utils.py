@@ -153,7 +153,68 @@ def generate_diagnosis_debrief_questions(diagnosis: str, difficulty: str, target
             "Describe your stepwise approach to bronchodilator and corticosteroid therapy.",
             "When would you consider IV magnesium, subcutaneous epinephrine, or other rescue therapies?",
             "Discuss discharge criteria and outpatient asthma action planning.",
-        ]
+        ],
+        "STROKE": [
+            "What clinical features helped you differentiate ischemic from hemorrhagic stroke, and how did this affect your management?",
+            "Describe the time-critical steps in the stroke chain of survival. What are the thrombolytic eligibility criteria and contraindications?",
+            "How did you use the NIH Stroke Scale to guide your clinical decisions and communicate severity?",
+            "Discuss blood pressure management in acute stroke. When is permissive hypertension appropriate versus urgent lowering?",
+            "What are the key components of a stroke team activation, and how did interprofessional communication impact this case?",
+        ],
+        "PNEUMONIA": [
+            "How did you risk-stratify this patient using severity scoring (CURB-65, PSI)? How did the score influence disposition?",
+            "Describe your empiric antibiotic selection. What patient factors influenced your choice of agent and route?",
+            "What clinical and radiographic findings helped you differentiate community-acquired from hospital-acquired pneumonia?",
+            "Discuss the role of blood cultures, sputum cultures, and procalcitonin in guiding pneumonia management.",
+        ],
+        "GI BLEED": [
+            "How did you differentiate upper from lower GI bleeding in this patient, and what clinical features guided your assessment?",
+            "Describe your resuscitation strategy. At what hemoglobin level and clinical parameters would you transfuse?",
+            "Discuss the role and timing of endoscopy in acute GI bleeding. What are the indications for emergent versus urgent intervention?",
+            "How would you manage anticoagulation in a patient with active GI bleeding who has another indication for anticoagulation?",
+        ],
+        "CHF": [
+            "How did you differentiate acute decompensated heart failure from other causes of dyspnea in this patient?",
+            "Describe your approach to acute management: diuretics, vasodilators, and oxygen. When would you consider BiPAP versus intubation?",
+            "Discuss the role of BNP/NT-proBNP, echocardiography, and chest X-ray in confirming your diagnosis and guiding treatment.",
+            "What precipitating factors for CHF exacerbation did you identify, and how does addressing them affect long-term outcomes?",
+        ],
+        "OVERDOSE": [
+            "How did you identify the toxidrome in this patient? What physical exam findings were most informative?",
+            "Describe your approach to airway management and supportive care in the obtunded overdose patient.",
+            "Discuss the role of specific antidotes (naloxone, flumazenil, N-acetylcysteine) and their risks. When is activated charcoal appropriate?",
+            "How would you approach the patient who refuses treatment after reversal? Discuss capacity assessment and safety planning.",
+        ],
+        "SEIZURE": [
+            "How did you differentiate epileptic seizure from syncope, psychogenic non-epileptic events, or other mimics?",
+            "Describe your stepwise approach to status epilepticus management: first-line, second-line, and refractory therapies.",
+            "What workup is indicated for a first-time seizure versus a known epileptic with breakthrough seizure?",
+            "Discuss post-ictal management and the criteria for safe discharge versus admission.",
+        ],
+        "PNEUMOTHORAX": [
+            "How did you clinically differentiate simple from tension pneumothorax, and how did this change your urgency of intervention?",
+            "Describe the indications and technique for needle decompression versus chest tube placement.",
+            "What are the key imaging findings on chest X-ray and ultrasound that confirmed your diagnosis?",
+            "Discuss post-procedure management and criteria for chest tube removal.",
+        ],
+        "MENINGITIS": [
+            "What clinical features in this presentation raised your suspicion for meningitis, and how did you differentiate bacterial from viral?",
+            "Describe the timing and sequence of LP, blood cultures, and empiric antibiotics. Why should antibiotics not be delayed for imaging?",
+            "Discuss the role of dexamethasone in bacterial meningitis and its timing relative to antibiotic administration.",
+            "How would you manage close contacts and what public health considerations apply?",
+        ],
+        "HYPERKALEMIA": [
+            "How did you recognize hyperkalemia from the clinical presentation and ECG findings? Describe the progressive ECG changes.",
+            "Describe your stepwise management: membrane stabilization, intracellular shifting, and potassium elimination.",
+            "What is the role of calcium gluconate versus calcium chloride, and when is emergent dialysis indicated?",
+            "Discuss the common causes of hyperkalemia in this patient and how addressing the underlying cause prevents recurrence.",
+        ],
+        "CARDIAC ARREST": [
+            "Describe your approach to high-quality CPR. What metrics did you use to assess CPR quality during the resuscitation?",
+            "How did you identify and address reversible causes (H's and T's) during the arrest?",
+            "Discuss your team's adherence to ACLS algorithms. Were there any deviations, and were they justified?",
+            "What are the key components of post-cardiac arrest care, and how do you prognosticate neurological outcomes?",
+        ],
     }
     
     # Select questions based on diagnosis
@@ -222,6 +283,56 @@ def generate_clinical_references(diagnosis: str, organ_system: str, procedures: 
             "National Heart, Lung, and Blood Institute (NHLBI): Expert Panel Report 3 (EPR-3) on the Management of Asthma",
             "Rodrigo GJ, et al. Magnesium Sulfate for Acute Bronchospasm — Systematic Review & Meta-Analysis",
         ],
+        "STROKE": [
+            "Powers WJ, et al. AHA/ASA Guidelines for the Early Management of Acute Ischemic Stroke (2019)",
+            "National Institute of Neurological Disorders and Stroke (NINDS) rt-PA Stroke Study Group — NEJM 1995",
+            "Jauch EC, et al. AHA/ASA Guidelines for Emergency Evaluation and Treatment of Ischemic Stroke",
+        ],
+        "PNEUMONIA": [
+            "Metlay JP, et al. ATS/IDSA Guideline on Diagnosis and Treatment of Adults with Community-Acquired Pneumonia (2019)",
+            "Mandell LA, et al. IDSA/ATS Consensus Guidelines on Management of Community-Acquired Pneumonia — Clin Infect Dis",
+            "Lim WS, et al. Defining Community-Acquired Pneumonia Severity on Presentation: CURB-65 — Thorax 2003",
+        ],
+        "GI BLEED": [
+            "Laine L, et al. ACG Clinical Guideline: Upper Gastrointestinal and Ulcer Bleeding — Am J Gastroenterol 2021",
+            "Villanueva C, et al. Transfusion Strategies for Acute Upper Gastrointestinal Bleeding — NEJM 2013",
+            "Strate LL, Gralnek IM. ACG Clinical Guideline: Management of Patients with Acute Lower GI Bleeding",
+        ],
+        "CHF": [
+            "Heidenreich PA, et al. AHA/ACC/HFSA Guideline for the Management of Heart Failure (2022)",
+            "Ponikowski P, et al. ESC Guidelines for the Diagnosis and Treatment of Acute and Chronic Heart Failure",
+            "Mebazaa A, et al. Recommendations on Pre-hospital and Early Hospital Management of Acute Heart Failure — Eur Heart J",
+        ],
+        "OVERDOSE": [
+            "Heard K, et al. Toxicologic Emergencies — Goldfrank's Toxicologic Emergencies (11th Edition)",
+            "Boyer EW, Shannon M. The Serotonin Syndrome — NEJM 2005",
+            "Stolbach AI, Hoffman RS. Acute Opioid Intoxication — UpToDate Clinical Review",
+        ],
+        "SEIZURE": [
+            "Glauser T, et al. Evidence-Based Guideline: Treatment of Convulsive Status Epilepticus — Neurology 2016",
+            "Kapur J, et al. Randomized Trial of Three Anticonvulsant Medications for Status Epilepticus (ESETT) — NEJM 2019",
+            "Huff JS, et al. ACEP Clinical Policy: Critical Issues in Evaluation and Management of Adult Seizures — Ann Emerg Med",
+        ],
+        "PNEUMOTHORAX": [
+            "Roberts DJ, et al. Clinical Presentation, Diagnosis, and Management of Pneumothorax — CMAJ",
+            "Baumann MH, et al. ACCP Delphi Consensus Statement: Management of Spontaneous Pneumothorax",
+            "Lichtenstein DA. BLUE-Protocol and FALLS-Protocol: Lung Ultrasound in the Critically Ill — Chest",
+        ],
+        "MENINGITIS": [
+            "Tunkel AR, et al. IDSA Practice Guidelines for Bacterial Meningitis — Clin Infect Dis 2004",
+            "van de Beek D, et al. Clinical Features and Prognostic Factors in Adults with Bacterial Meningitis — NEJM 2004",
+            "Brouwer MC, et al. Corticosteroids for Acute Bacterial Meningitis — Cochrane Database Syst Rev",
+        ],
+        "HYPERKALEMIA": [
+            "Clase CM, et al. Potassium Homeostasis and Management of Dyskalemia in Kidney Diseases: KDIGO Controversies",
+            "Long B, et al. Hyperkalemia in the Emergency Department — J Emerg Med 2018",
+            "Weisberg LS. Management of Severe Hyperkalemia — Crit Care Med 2008",
+        ],
+        "CARDIAC ARREST": [
+            "Panchal AR, et al. AHA Guidelines for CPR and Emergency Cardiovascular Care (2020)",
+            "Soar J, et al. International Liaison Committee on Resuscitation (ILCOR) Consensus on Advanced Life Support",
+            "Callaway CW, et al. AHA Scientific Statement: Post-Cardiac Arrest Care (2015)",
+        ],
     }
     
     # Select references based on diagnosis
@@ -242,118 +353,169 @@ def generate_clinical_references(diagnosis: str, organ_system: str, procedures: 
     return base_refs
 
 
+def _parse_bullet_string_to_list(text: str) -> List[str]:
+    """
+    Convert a bullet-formatted string back into a list of items.
+    Handles strings produced by format_for_humans() or common bullet formats.
+
+    Args:
+        text: A string that may contain bullet points, numbered items, or delimited items
+
+    Returns:
+        List of individual items extracted from the string
+    """
+    if not text or not isinstance(text, str):
+        return []
+
+    items = []
+    seen = set()
+
+    # Split on common bullet/number patterns
+    parts = re.split(r'[\n\r]+|(?:^|\s)[•\-\*]\s|(?:^|\s)\d+\.\s', text)
+    for part in parts:
+        line = part.strip(" -•*\t()[];,.")
+        if line and len(line) > 10 and line not in seen:
+            items.append(line)
+            seen.add(line)
+
+    return items
+
+
+def _is_well_formed_section7_string(value: Any, min_length: int = 50) -> bool:
+    """
+    Check if a Section 7 field value is already a well-formed, complete string.
+    A well-formed string is long enough and contains meaningful content.
+
+    Args:
+        value: The field value to check
+        min_length: Minimum character length to consider well-formed
+
+    Returns:
+        True if the value is a complete, usable string
+    """
+    if not isinstance(value, str):
+        return False
+    stripped = value.strip()
+    return len(stripped) >= min_length
+
+
 def auto_populate_section_7(case_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Robustly populate Section 7 (Critical Actions, Debrief Questions, References).
-    
+
+    Handles both list and string inputs — clean_data_structure() may have already
+    converted lists to bullet-formatted strings via format_for_humans(). This function
+    detects that and avoids re-truncating well-formed strings.
+
     Intelligently extracts from state actions, generates diagnosis-specific debrief questions,
     and creates clinical references. Provides smart fallbacks if AI output is incomplete.
-    
+
     Args:
         case_data: Complete case dictionary
-    
+
     Returns:
         case_data with Section 7 fully populated
     """
     # ====== CRITICAL ACTIONS ======
-    critical_actions = case_data.get("critical_actions", [])
-    
-    # If critical_actions is empty or weak, try to extract from state actions
-    if not critical_actions or (isinstance(critical_actions, list) and len([a for a in critical_actions if a and len(str(a)) > 5]) < 2):
-        action_fields = ["s3_actions", "s4_actions", "s1_actions", "s2_actions", "s5_actions"]  # Prioritize critical states
-        gathered = []
-        seen = set()
-        
-        for field in action_fields:
-            raw = case_data.get(field, "")
-            if not raw or len(str(raw)) < 10:
-                continue
-            # Split on common delimiters
-            for delimiter in ["\n", "•", "-", "*", ";"]:
-                parts = str(raw).split(delimiter)
-                for part in parts:
-                    line = part.strip(" -•*\t()[]").strip()
-                    # Filter for action-like phrases (at least 5 chars, sounds like a clinical action)
-                    if line and len(line) > 10 and line not in seen and not line.startswith("("):
+    raw_actions = case_data.get("critical_actions", [])
+
+    # Normalize: if it's already a well-formed string, check if it's complete
+    if _is_well_formed_section7_string(raw_actions):
+        # Already a complete string (e.g., from clean_data_structure) — keep it
+        case_data["critical_actions"] = raw_actions
+    else:
+        # Convert string back to list if needed, or use list directly
+        if isinstance(raw_actions, str):
+            critical_actions = _parse_bullet_string_to_list(raw_actions)
+        elif isinstance(raw_actions, list):
+            critical_actions = [str(a) for a in raw_actions if a and len(str(a)) > 5]
+        else:
+            critical_actions = []
+
+        # If weak (fewer than 2 meaningful items), extract from state actions
+        if len(critical_actions) < 2:
+            action_fields = ["s3_actions", "s4_actions", "s1_actions", "s2_actions", "s5_actions"]
+            gathered = []
+            seen = set()
+
+            for field_name in action_fields:
+                raw = case_data.get(field_name, "")
+                if not raw or len(str(raw)) < 10:
+                    continue
+                extracted = _parse_bullet_string_to_list(str(raw))
+                for line in extracted:
+                    if line not in seen:
                         gathered.append(line)
                         seen.add(line)
                         if len(gathered) >= 6:
                             break
                 if len(gathered) >= 6:
                     break
-            if len(gathered) >= 6:
-                break
-        
-        # If we collected actions, use them
-        if gathered:
-            critical_actions = gathered[:6]
-        else:
-            # Smart fallback: generate from diagnosis + difficulty + ed_objectives
-            diagnosis = case_data.get("diagnosis", "Unknown condition")
-            difficulty = case_data.get("difficulty", "Intermediate")
-            objectives = case_data.get("ed_objectives", "Manage acute presentation")
-            
-            critical_actions = [
-                f"Perform systematic ABCDE assessment and stabilize airway/breathing/circulation",
-                f"Obtain appropriate diagnostic testing (labs, imaging) based on differential for {diagnosis}",
-                f"Initiate empiric treatment aligned with {diagnosis} management guidelines",
-                f"Monitor response to interventions and reassess frequently",
-                f"Prepare for escalation or definitive management based on clinical trajectory",
-                f"Communicate findings and plan clearly to the team and patient"
-            ]
-    
-    case_data["critical_actions"] = critical_actions[:6]  # Cap at 6
-    
-    # Format critical_actions as string for Word template
-    if isinstance(critical_actions, list):
-        case_data["critical_actions"] = "\n• ".join([str(a) for a in critical_actions if a]) if critical_actions else "Not specified"
-    
+
+            if gathered:
+                critical_actions = gathered[:6]
+            else:
+                # Smart fallback: generate from diagnosis
+                diagnosis = case_data.get("diagnosis", "Unknown condition")
+                critical_actions = [
+                    "Perform systematic ABCDE assessment and stabilize airway/breathing/circulation",
+                    f"Obtain appropriate diagnostic testing (labs, imaging) based on differential for {diagnosis}",
+                    f"Initiate empiric treatment aligned with {diagnosis} management guidelines",
+                    "Monitor response to interventions and reassess frequently",
+                    "Prepare for escalation or definitive management based on clinical trajectory",
+                    "Communicate findings and plan clearly to the team and patient"
+                ]
+
+        # Cap at 6 items and format as bullet string for Word template
+        critical_actions = critical_actions[:6]
+        case_data["critical_actions"] = ("• " + "\n• ".join(critical_actions)) if critical_actions else "Not specified"
+
     # ====== DEBRIEF QUESTIONS ======
-    debrief_questions = case_data.get("debrief_questions", [])
-    
-    # If missing or weak, generate diagnosis-specific questions
-    if not debrief_questions or (isinstance(debrief_questions, list) and len([q for q in debrief_questions if q and len(str(q)) > 20]) < 2):
-        diagnosis = case_data.get("diagnosis", "Unknown")
-        difficulty = case_data.get("difficulty", "Intermediate")
-        target_learner = case_data.get("target_learner", "Medical Students")
-        
-        debrief_questions = generate_diagnosis_debrief_questions(diagnosis, difficulty, target_learner)
-    
-    debrief_questions = debrief_questions[:5]  # Cap at 5
-    
-    # Format debrief_questions as string for Word template
-    if isinstance(debrief_questions, list):
-        formatted_q = []
-        for i, q in enumerate(debrief_questions, 1):
-            if q:
-                formatted_q.append(f"{i}. {str(q)}")
+    raw_debrief = case_data.get("debrief_questions", [])
+
+    if _is_well_formed_section7_string(raw_debrief):
+        case_data["debrief_questions"] = raw_debrief
+    else:
+        if isinstance(raw_debrief, str):
+            debrief_questions = _parse_bullet_string_to_list(raw_debrief)
+        elif isinstance(raw_debrief, list):
+            debrief_questions = [str(q) for q in raw_debrief if q and len(str(q)) > 20]
+        else:
+            debrief_questions = []
+
+        if len(debrief_questions) < 2:
+            diagnosis = case_data.get("diagnosis", "Unknown")
+            difficulty = case_data.get("difficulty", "Intermediate")
+            target_learner = case_data.get("target_learner", "Medical Students")
+            debrief_questions = generate_diagnosis_debrief_questions(diagnosis, difficulty, target_learner)
+
+        debrief_questions = debrief_questions[:5]
+        formatted_q = [f"{i}. {q}" for i, q in enumerate(debrief_questions, 1) if q]
         case_data["debrief_questions"] = "\n".join(formatted_q) if formatted_q else "Not specified"
-    else:
-        case_data["debrief_questions"] = debrief_questions
-    
+
     # ====== REFERENCES ======
-    references = case_data.get("references", [])
-    
-    # If missing or weak, auto-generate clinical references
-    if not references or (isinstance(references, list) and len([r for r in references if r and len(str(r)) > 20]) < 2):
-        diagnosis = case_data.get("diagnosis", "Unknown")
-        organ_system = case_data.get("organ_system", "General")
-        procedures = case_data.get("procedures", "")
-        
-        references = generate_clinical_references(diagnosis, organ_system, procedures)
-    
-    references = references[:5]  # Cap at 5
-    
-    # Format references as string for Word template
-    if isinstance(references, list):
-        formatted_r = []
-        for i, r in enumerate(references, 1):
-            if r:
-                formatted_r.append(f"{i}. {str(r)}")
-        case_data["references"] = "\n".join(formatted_r) if formatted_r else "Not specified"
+    raw_refs = case_data.get("references", [])
+
+    if _is_well_formed_section7_string(raw_refs):
+        case_data["references"] = raw_refs
     else:
-        case_data["references"] = references
-    
+        if isinstance(raw_refs, str):
+            references = _parse_bullet_string_to_list(raw_refs)
+        elif isinstance(raw_refs, list):
+            references = [str(r) for r in raw_refs if r and len(str(r)) > 20]
+        else:
+            references = []
+
+        if len(references) < 2:
+            diagnosis = case_data.get("diagnosis", "Unknown")
+            organ_system = case_data.get("organ_system", "General")
+            procedures = case_data.get("procedures", "")
+            references = generate_clinical_references(diagnosis, organ_system, procedures)
+
+        references = references[:5]
+        formatted_r = [f"{i}. {r}" for i, r in enumerate(references, 1) if r]
+        case_data["references"] = "\n".join(formatted_r) if formatted_r else "Not specified"
+
     return case_data
 
 
@@ -386,9 +548,13 @@ def clean_data_structure(data: Any) -> Any:
         return data
 
 
-def validate_json_string(json_string: str) -> tuple[bool, Union[Dict, str]]:
+def robust_parse_json(text: str) -> Dict[str, Any]:
     """
-    Parse a JSON string with multi-strategy recovery for common LLM output issues.
+    Parse JSON from AI model output with multi-strategy recovery.
+
+    This is the canonical JSON parser for the entire application. Handles common
+    LLM output issues like markdown fences, BOM characters, trailing commas,
+    and JavaScript-style comments.
 
     Strategies tried in order:
       1. Direct parse (fast path for clean responses)
@@ -397,17 +563,23 @@ def validate_json_string(json_string: str) -> tuple[bool, Union[Dict, str]]:
       4. Trailing-comma removal (e.g. {"k":"v",} is invalid JSON)
       5. JavaScript comment stripping (// and /* */)
 
+    Args:
+        text: Raw text from an AI model response
+
     Returns:
-        Tuple of (is_valid, parsed_dict_or_error_message)
+        Parsed dictionary
+
+    Raises:
+        ValueError: If all recovery strategies fail
     """
     # --- Strategy 1: fast path ---
     try:
-        return True, json.loads(json_string)
+        return json.loads(text)
     except json.JSONDecodeError:
         pass
 
     # All remaining strategies work on a progressively cleaned string.
-    cleaned = json_string.strip().lstrip('\ufeff')  # strip BOM
+    cleaned = text.strip().lstrip('\ufeff')  # strip BOM
 
     # --- Strategy 2: strip markdown code fences ---
     fence_match = re.search(r'```(?:json)?\s*([\s\S]*?)```', cleaned, re.IGNORECASE)
@@ -419,7 +591,7 @@ def validate_json_string(json_string: str) -> tuple[bool, Union[Dict, str]]:
         cleaned = cleaned.strip()
 
     try:
-        return True, json.loads(cleaned)
+        return json.loads(cleaned)
     except json.JSONDecodeError:
         pass
 
@@ -437,7 +609,7 @@ def validate_json_string(json_string: str) -> tuple[bool, Union[Dict, str]]:
             if ch == '\\' and in_string:
                 escape_next = True
                 continue
-            if ch == '"' and not escape_next:
+            if ch == '"':
                 in_string = not in_string
             if not in_string:
                 if ch == '{':
@@ -449,14 +621,14 @@ def validate_json_string(json_string: str) -> tuple[bool, Union[Dict, str]]:
                         break
         candidate = cleaned[start:end + 1]
         try:
-            return True, json.loads(candidate)
+            return json.loads(candidate)
         except json.JSONDecodeError:
             cleaned = candidate  # use this tighter candidate for further repair
 
     # --- Strategy 4: remove trailing commas before } or ] ---
     repaired = re.sub(r',\s*([}\]])', r'\1', cleaned)
     try:
-        return True, json.loads(repaired)
+        return json.loads(repaired)
     except json.JSONDecodeError:
         pass
 
@@ -464,10 +636,29 @@ def validate_json_string(json_string: str) -> tuple[bool, Union[Dict, str]]:
     no_comments = re.sub(r'//[^\n]*', '', repaired)
     no_comments = re.sub(r'/\*[\s\S]*?\*/', '', no_comments)
     try:
-        return True, json.loads(no_comments)
+        return json.loads(no_comments)
     except json.JSONDecodeError as e:
-        error_msg = f"JSON Parse Error at line {e.lineno}, column {e.colno}: {e.msg}"
-        return False, error_msg
+        raise ValueError(
+            f"JSON parsing failed after all recovery strategies: {e.msg} "
+            f"at line {e.lineno}, col {e.colno}"
+        )
+
+
+def validate_json_string(json_string: str) -> tuple[bool, Union[Dict, str]]:
+    """
+    Parse a JSON string with multi-strategy recovery for common LLM output issues.
+
+    Wrapper around robust_parse_json() that returns a (success, result) tuple
+    for backward compatibility.
+
+    Returns:
+        Tuple of (is_valid, parsed_dict_or_error_message)
+    """
+    try:
+        result = robust_parse_json(json_string)
+        return True, result
+    except ValueError as e:
+        return False, str(e)
 
 
 def ensure_no_special_characters(text: str) -> str:
@@ -700,16 +891,42 @@ def ensure_critical_fields_populated(case_data: Dict[str, Any],
         "Anaphylaxis": "Patient presents with urticaria and respiratory distress",
         "Pulmonary Embolism": "Patient presents with dyspnea and tachycardia",
         "DKA": "Patient presents with altered mental status and Kussmaul respirations",
-        "Asthma Exacerbation": "Patient presents with wheezing and shortness of breath"
+        "Asthma Exacerbation": "Patient presents with wheezing and shortness of breath",
+        "Stroke": "Patient presents with sudden-onset unilateral weakness and speech difficulty",
+        "Pneumonia": "Patient presents with productive cough, fever, and dyspnea",
+        "GI Bleed": "Patient presents with hematemesis or melena and signs of hypovolemia",
+        "CHF Exacerbation": "Patient presents with worsening dyspnea, orthopnea, and peripheral edema",
+        "Overdose": "Patient presents with altered mental status and respiratory depression",
+        "Seizure": "Patient presents post-ictal with confusion following witnessed tonic-clonic activity",
+        "Hypoglycemia": "Patient presents with diaphoresis, tremor, and altered mental status",
+        "Pneumothorax": "Patient presents with acute chest pain, dyspnea, and absent breath sounds",
+        "Meningitis": "Patient presents with fever, headache, neck stiffness, and photophobia",
+        "Hyperkalemia": "Patient presents with generalized weakness and bradycardia",
+        "Ectopic Pregnancy": "Patient presents with lower abdominal pain, vaginal bleeding, and hemodynamic instability",
+        "Thyroid Storm": "Patient presents with hyperthermia, severe tachycardia, agitation, and delirium",
+        "Cardiac Arrest": "Patient found unresponsive, pulseless, and apneic",
     }
-    
+
     default_hpi = {
         "Sepsis": "Symptoms began 2-3 days ago with fever, chills, and malaise. Patient reports recent URI symptoms. Has worsening confusion and tachycardia.",
         "Myocardial Infarction": "Acute onset chest pain radiating to left arm. Associated with dyspnea and diaphoresis. Pain began at rest approximately 1 hour ago.",
         "Anaphylaxis": "Acute onset 15-30 minutes after exposure. Symptoms rapidly progressive. Exposure history suggests allergic reaction.",
         "Pulmonary Embolism": "Acute onset dyspnea and pleuritic chest pain. Recent surgery or immobility. Tachycardia and tachypnea present.",
         "DKA": "History of diabetes. Patient reports thirst, polyuria, and nausea for 1-2 days. Accompanied by abdominal pain and fruity breath odor.",
-        "Asthma Exacerbation": "Known asthmatic with acute dyspnea. Exposure to trigger (allergen, infection, cold air). No relief with home rescue inhaler."
+        "Asthma Exacerbation": "Known asthmatic with acute dyspnea. Exposure to trigger (allergen, infection, cold air). No relief with home rescue inhaler.",
+        "Stroke": "Sudden onset of left-sided weakness and slurred speech approximately 45 minutes ago. Wife witnessed onset while patient was eating breakfast. No preceding headache or trauma. Last known well at 7:30 AM.",
+        "Pneumonia": "Productive cough with rust-colored sputum for 3 days, worsening fever to 103F. Progressive dyspnea on exertion, now dyspneic at rest. Rigors and pleuritic chest pain on right side.",
+        "GI Bleed": "Two episodes of coffee-ground emesis over past 6 hours. Reports dark, tarry stools for 2 days. Lightheaded with standing. History of NSAID use for chronic back pain.",
+        "CHF Exacerbation": "Progressive dyspnea over 5 days, now unable to lie flat. Three-pillow orthopnea, paroxysmal nocturnal dyspnea. Bilateral leg swelling worsening. Reports dietary indiscretion and missed diuretic doses.",
+        "Overdose": "Found unresponsive by roommate. Empty pill bottles nearby. Last seen normal 4 hours ago. Unknown substances ingested. History of depression.",
+        "Seizure": "Witnessed tonic-clonic activity lasting approximately 3 minutes. Now post-ictal with confusion. No prior seizure history. Recent sleep deprivation and increased alcohol use.",
+        "Hypoglycemia": "Insulin-dependent diabetic who missed lunch. Progressive tremor, diaphoresis, and confusion over past 30 minutes. Took morning insulin as usual.",
+        "Pneumothorax": "Sudden onset right-sided chest pain and severe dyspnea 20 minutes ago. Tall, thin male with no preceding trauma. Progressively more dyspneic and anxious.",
+        "Meningitis": "Severe headache, fever, and neck stiffness developing over 12 hours. Photophobia and one episode of vomiting. Recently exposed to college dormitory contacts with URI symptoms.",
+        "Hyperkalemia": "Progressive generalized weakness over 24 hours. History of CKD stage IV, missed dialysis session. Reports tingling in extremities and palpitations.",
+        "Ectopic Pregnancy": "Sharp lower abdominal pain for 6 hours, initially intermittent, now constant. Vaginal spotting. Last menstrual period 7 weeks ago. Lightheaded with standing.",
+        "Thyroid Storm": "Known Graves disease, stopped methimazole 2 weeks ago. Progressive agitation, palpitations, profuse sweating, and fever over 48 hours. Diarrhea and tremor.",
+        "Cardiac Arrest": "Witnessed collapse at home. Bystander CPR initiated within 2 minutes. EMS arrived in 8 minutes, found in ventricular fibrillation. One shock delivered en route.",
     }
     
     # Ensure case_name
@@ -762,5 +979,118 @@ def ensure_critical_fields_populated(case_data: Dict[str, Any],
             "o2_saturation": "94",
             "glucose": "150"
         }
-    
+
+    return case_data
+
+
+# ============================================================================
+# FIELD-LENGTH VALIDATION
+# ============================================================================
+
+# Maximum field lengths (characters) for safe export to Word/Airtable
+_FIELD_LENGTH_LIMITS = {
+    # Section 7 fields — these are the most commonly truncated
+    "critical_actions": 2000,
+    "debrief_questions": 2000,
+    "references": 2000,
+    # Narrative fields
+    "hpi": 3000,
+    "case_summary": 1500,
+    "vignette": 1000,
+    "ed_objectives": 2000,
+    # State fields
+    "s1_prog": 1500, "s2_prog": 1500, "s3_prog": 1500, "s4_prog": 1500, "s5_prog": 1500,
+    "s1_actions": 1500, "s2_actions": 1500, "s3_actions": 1500, "s4_actions": 1500, "s5_actions": 1500,
+    "s1_notes": 1500, "s2_notes": 1500, "s3_notes": 1500, "s4_notes": 1500, "s5_notes": 1500,
+}
+
+# Minimum field lengths — fields shorter than this are likely truncated
+_FIELD_MIN_LENGTHS = {
+    "critical_actions": 50,
+    "debrief_questions": 50,
+    "references": 50,
+    "hpi": 30,
+    "case_summary": 20,
+    "ed_objectives": 20,
+}
+
+
+class FieldLengthIssue:
+    """Represents a field that is too long or suspiciously short."""
+    def __init__(self, field_name: str, actual_length: int, limit: int,
+                 issue_type: str, message: str):
+        self.field_name = field_name
+        self.actual_length = actual_length
+        self.limit = limit
+        self.issue_type = issue_type  # "too_long" or "truncated"
+        self.message = message
+
+
+def validate_field_lengths(case_data: Dict[str, Any]) -> List['FieldLengthIssue']:
+    """
+    Validate field lengths before export to catch truncation or overflow.
+
+    Checks for:
+    - Fields that exceed safe export limits (too long for Word/Airtable)
+    - Fields that are suspiciously short (likely truncated by upstream processing)
+
+    Args:
+        case_data: Complete case dictionary
+
+    Returns:
+        List of FieldLengthIssue objects (empty = all good)
+    """
+    issues = []
+
+    # Check for fields that are too long
+    for field_name, max_len in _FIELD_LENGTH_LIMITS.items():
+        value = case_data.get(field_name, "")
+        if isinstance(value, str) and len(value) > max_len:
+            issues.append(FieldLengthIssue(
+                field_name=field_name,
+                actual_length=len(value),
+                limit=max_len,
+                issue_type="too_long",
+                message=f"{field_name} is {len(value)} chars (limit {max_len}). "
+                        f"May be truncated during Word/Airtable export."
+            ))
+
+    # Check for fields that are suspiciously short (likely truncated)
+    for field_name, min_len in _FIELD_MIN_LENGTHS.items():
+        value = case_data.get(field_name, "")
+        if isinstance(value, str) and 0 < len(value) < min_len:
+            issues.append(FieldLengthIssue(
+                field_name=field_name,
+                actual_length=len(value),
+                limit=min_len,
+                issue_type="truncated",
+                message=f"{field_name} is only {len(value)} chars (expected >{min_len}). "
+                        f"This field may have been truncated during processing."
+            ))
+
+    return issues
+
+
+def truncate_long_fields(case_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Safely truncate fields that exceed export limits, preserving content quality.
+    Adds an ellipsis indicator so users know content was trimmed.
+
+    Args:
+        case_data: Complete case dictionary
+
+    Returns:
+        case_data with any oversized fields safely truncated
+    """
+    for field_name, max_len in _FIELD_LENGTH_LIMITS.items():
+        value = case_data.get(field_name, "")
+        if isinstance(value, str) and len(value) > max_len:
+            # Truncate at the last complete sentence or bullet within the limit
+            truncated = value[:max_len - 20]
+            # Try to cut at last newline for clean formatting
+            last_newline = truncated.rfind('\n')
+            if last_newline > max_len // 2:
+                truncated = truncated[:last_newline]
+            case_data[field_name] = truncated + "\n[... truncated for export]"
+
     return case_data

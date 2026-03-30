@@ -41,7 +41,9 @@ from utils import (
     create_case_export_metadata,
     ensure_critical_fields_populated,
     apply_dka_ua_logic,
-    auto_populate_section_7
+    auto_populate_section_7,
+    validate_field_lengths,
+    truncate_long_fields,
 )
 
 
@@ -873,7 +875,9 @@ def main():
     # Resolve random values
     random_diagnoses = [
         "Sepsis", "Myocardial Infarction", "Anaphylaxis",
-        "Pulmonary Embolism", "DKA", "Asthma Exacerbation"
+        "Pulmonary Embolism", "DKA", "Asthma Exacerbation",
+        "Stroke", "Pneumonia", "GI Bleed", "CHF Exacerbation",
+        "Overdose", "Seizure", "Pneumothorax", "Meningitis",
     ]
     
     final_diagnosis = form_data["diagnosis"] if form_data["diagnosis"] \
@@ -882,11 +886,13 @@ def main():
         else random.randint(18, 85)
     
     # -------- STAGE 2: GENERATION --------
-    progress_bar = st.progress(0, text="🧠 AI is architecting your case (Phase 0: Complexity Profile)...")
+    progress_bar = st.progress(0, text="Initializing AI case generation pipeline...")
+    phase_status = st.empty()
 
     try:
         # Step 1: Generate with Gemini (passes CCS-5 level)
-        progress_bar.progress(20, text="20% — Phase 0: Building Vector Model & complexity profile...")
+        progress_bar.progress(5, text="5% — Phase 0: Building Vector Model & complexity profile...")
+        phase_status.info("🧬 **Phase 0/3** — Profiling case complexity (Vector Model, CCFs, cognitive biases)...")
         case_data = generate_case_with_gemini(
             final_diagnosis,
             final_age,
@@ -895,6 +901,8 @@ def main():
             form_data["custom_focus"],
             ccs5_value=form_data.get("ccs5_value", 2)
         )
+        progress_bar.progress(50, text="50% — AI generation complete, post-processing...")
+        phase_status.info("🔬 **Post-processing** — Applying medical logic, populating Section 7...")
 
         # Step 2: Add metadata
         progress_bar.progress(55, text="55% — Adding case metadata...")
@@ -923,11 +931,34 @@ def main():
         )
 
         # Step 2.6: Apply smart medical logic (DKA UA fix) and auto-populate Section 7
+        progress_bar.progress(60, text="60% — Applying diagnosis-specific medical logic...")
+        phase_status.info("💊 **Medical Logic** — Enforcing lab correlations, populating critical actions & debrief questions...")
         case_data = apply_dka_ua_logic(case_data)
         case_data = auto_populate_section_7(case_data)
 
+        # Step 2.7: Validate field lengths and warn about truncation/overflow
+        progress_bar.progress(70, text="70% — Checking field integrity...")
+        phase_status.info("📏 **Field Validation** — Checking for truncation and overflow...")
+        field_issues = validate_field_lengths(case_data)
+        if field_issues:
+            truncated = [i for i in field_issues if i.issue_type == "truncated"]
+            too_long = [i for i in field_issues if i.issue_type == "too_long"]
+            if truncated:
+                st.warning(
+                    "**Possible truncation detected** in: "
+                    + ", ".join(f"`{i.field_name}` ({i.actual_length} chars)" for i in truncated)
+                    + ". These fields may be incomplete — check the exported document."
+                )
+            if too_long:
+                st.info(
+                    "**Long fields auto-trimmed** for export safety: "
+                    + ", ".join(f"`{i.field_name}` ({i.actual_length} chars)" for i in too_long)
+                )
+                case_data = truncate_long_fields(case_data)
+
         # Step 3: Validate case
         progress_bar.progress(80, text="80% — Validating clinical completeness...")
+        phase_status.info("✅ **Clinical Validation** — Checking completeness, consistency, and educational quality...")
         validator = CaseValidator()
         is_valid, validation_results = validator.validate_complete_case(case_data)
         validation_summary = validator.get_validation_summary()
@@ -939,7 +970,9 @@ def main():
         complexity_profile = case_data.pop("_complexity_profile", {})
         st.session_state["complexity_profile"] = complexity_profile
         progress_bar.progress(100, text="✓ Case generation complete!")
+        phase_status.success("🎉 **All phases complete** — Case generated, validated, and ready for export.")
         progress_bar.empty()
+        phase_status.empty()
         
         # -------- STAGE 3: DISPLAY & VALIDATION --------
         state_mgr.apply_state_transition("generating", "generated",

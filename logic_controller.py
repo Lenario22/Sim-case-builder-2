@@ -321,57 +321,182 @@ class MedicalLogicController:
             VitalSigns object for state 1 (arrival)
         """
         # Base vital sign presets by diagnosis
+        # Each preset reflects the expected pathophysiological presentation:
+        #   - Difficulty multiplier scales severity (higher = sicker patient)
+        #   - Temperature reflects infection/inflammation status
+        #   - O2 sat reflects respiratory/perfusion compromise
+        dm = self.difficulty_multiplier
         vital_presets = {
+            # --- ORIGINAL 6 DIAGNOSES ---
             "Sepsis": VitalSigns(
-                heart_rate=int(110 * self.difficulty_multiplier),
-                systolic_bp=int(95 - (15 * (self.difficulty_multiplier - 1))),
-                diastolic_bp=int(60 - (10 * (self.difficulty_multiplier - 1))),
-                respiratory_rate=int(20 * self.difficulty_multiplier),
+                heart_rate=int(110 * dm),
+                systolic_bp=int(95 - (15 * (dm - 1))),
+                diastolic_bp=int(60 - (10 * (dm - 1))),
+                respiratory_rate=int(20 * dm),
                 temperature_f=102.5,
-                o2_saturation=int(94 - (3 * (self.difficulty_multiplier - 1)))
+                o2_saturation=int(94 - (3 * (dm - 1)))
             ),
             "Myocardial Infarction": VitalSigns(
-                heart_rate=int(95 * self.difficulty_multiplier),
-                systolic_bp=int(130 - (20 * (self.difficulty_multiplier - 1))),
-                diastolic_bp=int(80 - (12 * (self.difficulty_multiplier - 1))),
-                respiratory_rate=int(18 * self.difficulty_multiplier),
+                heart_rate=int(95 * dm),
+                systolic_bp=int(130 - (20 * (dm - 1))),
+                diastolic_bp=int(80 - (12 * (dm - 1))),
+                respiratory_rate=int(18 * dm),
                 temperature_f=98.6,
-                o2_saturation=int(96 - (2 * (self.difficulty_multiplier - 1)))
+                o2_saturation=int(96 - (2 * (dm - 1)))
             ),
             "Anaphylaxis": VitalSigns(
-                heart_rate=int(130 * self.difficulty_multiplier),
-                systolic_bp=int(80 - (20 * (self.difficulty_multiplier - 1))),
-                diastolic_bp=int(50 - (10 * (self.difficulty_multiplier - 1))),
-                respiratory_rate=int(26 * self.difficulty_multiplier),
+                heart_rate=int(130 * dm),
+                systolic_bp=int(80 - (20 * (dm - 1))),
+                diastolic_bp=int(50 - (10 * (dm - 1))),
+                respiratory_rate=int(26 * dm),
                 temperature_f=98.6,
-                o2_saturation=int(85 - (5 * (self.difficulty_multiplier - 1)))
+                o2_saturation=int(85 - (5 * (dm - 1)))
             ),
             "Pulmonary Embolism": VitalSigns(
-                heart_rate=int(105 * self.difficulty_multiplier),
-                systolic_bp=int(110 - (15 * (self.difficulty_multiplier - 1))),
-                diastolic_bp=int(70 - (10 * (self.difficulty_multiplier - 1))),
-                respiratory_rate=int(22 * self.difficulty_multiplier),
+                heart_rate=int(105 * dm),
+                systolic_bp=int(110 - (15 * (dm - 1))),
+                diastolic_bp=int(70 - (10 * (dm - 1))),
+                respiratory_rate=int(22 * dm),
                 temperature_f=99.1,
-                o2_saturation=int(91 - (3 * (self.difficulty_multiplier - 1)))
+                o2_saturation=int(91 - (3 * (dm - 1)))
             ),
             "DKA": VitalSigns(
-                heart_rate=int(105 * self.difficulty_multiplier),
-                systolic_bp=int(100 - (15 * (self.difficulty_multiplier - 1))),
-                diastolic_bp=int(62 - (10 * (self.difficulty_multiplier - 1))),
-                respiratory_rate=int(24 * self.difficulty_multiplier),
+                heart_rate=int(105 * dm),
+                systolic_bp=int(100 - (15 * (dm - 1))),
+                diastolic_bp=int(62 - (10 * (dm - 1))),
+                respiratory_rate=int(24 * dm),       # Kussmaul respirations
                 temperature_f=101.2,
-                o2_saturation=int(95 - (2 * (self.difficulty_multiplier - 1)))
+                o2_saturation=int(95 - (2 * (dm - 1)))
             ),
             "Asthma Exacerbation": VitalSigns(
-                heart_rate=int(115 * self.difficulty_multiplier),
-                systolic_bp=int(135 - (10 * (self.difficulty_multiplier - 1))),
-                diastolic_bp=int(85 - (5 * (self.difficulty_multiplier - 1))),
-                respiratory_rate=int(28 * self.difficulty_multiplier),
+                heart_rate=int(115 * dm),
+                systolic_bp=int(135 - (10 * (dm - 1))),
+                diastolic_bp=int(85 - (5 * (dm - 1))),
+                respiratory_rate=int(28 * dm),
                 temperature_f=99.5,
-                o2_saturation=int(87 - (4 * (self.difficulty_multiplier - 1)))
+                o2_saturation=int(87 - (4 * (dm - 1)))
+            ),
+            # --- NEW DIAGNOSES ---
+            # Stroke: hypertensive, normal temp, often normal O2
+            "Stroke": VitalSigns(
+                heart_rate=int(88 * dm),
+                systolic_bp=int(185 - (10 * (dm - 1))),  # Hypertensive crisis common
+                diastolic_bp=int(105 - (5 * (dm - 1))),
+                respiratory_rate=int(16 * dm),
+                temperature_f=98.6,
+                o2_saturation=int(96 - (2 * (dm - 1)))
+            ),
+            # Pneumonia: febrile, tachypneic, hypoxic, tachycardic
+            "Pneumonia": VitalSigns(
+                heart_rate=int(105 * dm),
+                systolic_bp=int(115 - (12 * (dm - 1))),
+                diastolic_bp=int(72 - (8 * (dm - 1))),
+                respiratory_rate=int(24 * dm),
+                temperature_f=103.1,
+                o2_saturation=int(90 - (4 * (dm - 1)))
+            ),
+            # GI Bleed: tachycardic, hypotensive (hypovolemic), normal temp/O2
+            "GI Bleed": VitalSigns(
+                heart_rate=int(115 * dm),
+                systolic_bp=int(90 - (18 * (dm - 1))),
+                diastolic_bp=int(55 - (10 * (dm - 1))),
+                respiratory_rate=int(18 * dm),
+                temperature_f=98.4,
+                o2_saturation=int(97 - (1 * (dm - 1)))
+            ),
+            # CHF Exacerbation: tachycardic, hypertensive initially, tachypneic, hypoxic
+            "CHF Exacerbation": VitalSigns(
+                heart_rate=int(108 * dm),
+                systolic_bp=int(165 - (15 * (dm - 1))),
+                diastolic_bp=int(95 - (8 * (dm - 1))),
+                respiratory_rate=int(26 * dm),
+                temperature_f=98.8,
+                o2_saturation=int(88 - (4 * (dm - 1)))
+            ),
+            # Overdose/Toxicology: bradycardic or tachycardic (depends on agent),
+            # using opioid-like profile: bradypneic, hypotensive, hypothermic
+            "Overdose": VitalSigns(
+                heart_rate=int(62 / dm),              # Bradycardia worsens
+                systolic_bp=int(95 - (15 * (dm - 1))),
+                diastolic_bp=int(58 - (8 * (dm - 1))),
+                respiratory_rate=max(6, int(10 / dm)),  # Respiratory depression
+                temperature_f=96.8,                     # Hypothermia common
+                o2_saturation=int(88 - (5 * (dm - 1)))
+            ),
+            # Seizure: tachycardic, hypertensive, tachypneic post-ictal, mild hyperthermia
+            "Seizure": VitalSigns(
+                heart_rate=int(120 * dm),
+                systolic_bp=int(160 - (10 * (dm - 1))),
+                diastolic_bp=int(95 - (5 * (dm - 1))),
+                respiratory_rate=int(22 * dm),
+                temperature_f=100.2,
+                o2_saturation=int(92 - (3 * (dm - 1)))
+            ),
+            # Diabetic Hypoglycemia: tachycardic, diaphoretic, normal BP
+            "Hypoglycemia": VitalSigns(
+                heart_rate=int(105 * dm),
+                systolic_bp=int(130 - (8 * (dm - 1))),
+                diastolic_bp=int(78 - (5 * (dm - 1))),
+                respiratory_rate=int(18 * dm),
+                temperature_f=98.2,
+                o2_saturation=int(98 - (1 * (dm - 1)))
+            ),
+            # Tension Pneumothorax: tachycardic, hypotensive, tachypneic, severely hypoxic
+            "Pneumothorax": VitalSigns(
+                heart_rate=int(130 * dm),
+                systolic_bp=int(80 - (20 * (dm - 1))),
+                diastolic_bp=int(50 - (12 * (dm - 1))),
+                respiratory_rate=int(30 * dm),
+                temperature_f=98.6,
+                o2_saturation=int(82 - (5 * (dm - 1)))
+            ),
+            # Meningitis: febrile, tachycardic, may be hypotensive if septic
+            "Meningitis": VitalSigns(
+                heart_rate=int(115 * dm),
+                systolic_bp=int(105 - (15 * (dm - 1))),
+                diastolic_bp=int(65 - (10 * (dm - 1))),
+                respiratory_rate=int(20 * dm),
+                temperature_f=103.8,
+                o2_saturation=int(96 - (2 * (dm - 1)))
+            ),
+            # Hyperkalemia: bradycardic, normal BP initially, normal temp/O2
+            "Hyperkalemia": VitalSigns(
+                heart_rate=max(35, int(55 / dm)),      # Bradycardia worsens
+                systolic_bp=int(110 - (10 * (dm - 1))),
+                diastolic_bp=int(68 - (5 * (dm - 1))),
+                respiratory_rate=int(16 * dm),
+                temperature_f=98.6,
+                o2_saturation=int(97 - (1 * (dm - 1)))
+            ),
+            # Ectopic Pregnancy: tachycardic, hypotensive (hemorrhage), normal temp
+            "Ectopic Pregnancy": VitalSigns(
+                heart_rate=int(118 * dm),
+                systolic_bp=int(88 - (18 * (dm - 1))),
+                diastolic_bp=int(52 - (10 * (dm - 1))),
+                respiratory_rate=int(20 * dm),
+                temperature_f=98.6,
+                o2_saturation=int(98 - (1 * (dm - 1)))
+            ),
+            # Thyroid Storm: severely tachycardic, hyperthermic, hypertensive
+            "Thyroid Storm": VitalSigns(
+                heart_rate=int(145 * dm),
+                systolic_bp=int(160 - (10 * (dm - 1))),
+                diastolic_bp=int(70 - (8 * (dm - 1))),  # Wide pulse pressure
+                respiratory_rate=int(24 * dm),
+                temperature_f=104.5,
+                o2_saturation=int(95 - (2 * (dm - 1)))
+            ),
+            # Cardiac Arrest: pulseless — represented as extreme values
+            "Cardiac Arrest": VitalSigns(
+                heart_rate=0,
+                systolic_bp=0,
+                diastolic_bp=0,
+                respiratory_rate=0,
+                temperature_f=98.0,
+                o2_saturation=0
             ),
         }
-        
+
         return vital_presets.get(
             self.diagnosis,
             VitalSigns(110, 100, 65, 20, 99.0, 94)  # Default fallback
@@ -485,6 +610,19 @@ class MedicalLogicController:
             "Pulmonary Embolism": "Tachycardia, tachypnea, possible decreased breath sounds",
             "DKA": "Fruity breath odor, Kussmaul respirations, dehydration signs",
             "Asthma Exacerbation": "Wheezing, reduced air movement, accessory muscle use",
+            "Stroke": "Facial droop, unilateral weakness, speech difficulty, possible gaze deviation",
+            "Pneumonia": "Crackles/rhonchi on auscultation, productive cough, febrile, tachypneic",
+            "GI Bleed": "Pale, diaphoretic, melena or hematemesis, orthostatic hypotension, tachycardia",
+            "CHF Exacerbation": "JVD, bilateral crackles, peripheral edema, S3 gallop, orthopnea",
+            "Overdose": "Pinpoint pupils (opioid), decreased responsiveness, shallow respirations, cool skin",
+            "Seizure": "Post-ictal confusion, tongue laceration, incontinence, tachycardia, diaphoresis",
+            "Hypoglycemia": "Diaphoresis, tremor, confusion or agitation, tachycardia",
+            "Pneumothorax": "Absent breath sounds unilaterally, tracheal deviation, JVD, hyperresonance to percussion",
+            "Meningitis": "Nuchal rigidity, photophobia, petechial rash (if meningococcal), Kernig/Brudzinski positive",
+            "Hyperkalemia": "Bradycardia, muscle weakness, peaked T-waves on ECG, possible cardiac arrhythmia",
+            "Ectopic Pregnancy": "Lower abdominal tenderness, guarding, vaginal bleeding, signs of hypovolemic shock",
+            "Thyroid Storm": "Severe tachycardia, hyperthermia, agitation/delirium, tremor, lid lag, diaphoresis",
+            "Cardiac Arrest": "Unresponsive, no pulse, apneic, cyanosis",
         }
         
         base_finding = diagnosis_findings.get(
