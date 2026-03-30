@@ -13,7 +13,8 @@ from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from logic_controller import (
     CCS5Level, VectorModel, VectorAxis, ComplexityProfile,
-    TaskCCF, PatientCCF, UncertaintyType, CognitiveBias
+    TaskCCF, PatientCCF, UncertaintyType, CognitiveBias,
+    BranchingEngine, ComorbidityEngine, TimePressureEngine
 )
 from utils import robust_parse_json
 
@@ -32,6 +33,7 @@ class CaseConfig:
     target_learner: str
     custom_focus: str = ""
     ccs5_level: int = 0      # 0 = derive from difficulty; 1-5 = explicit CCS-5 level
+    comorbidities: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -247,6 +249,16 @@ Using the clinical reasoning plan below as your guide, generate a complete simul
 - Difficulty: {difficulty}
 - Target Learner: {target_learner}
 {custom_section}
+
+### Diagnosis-Specific Branching Guide
+Use this clinical reference to ensure your state progression is medically accurate
+and diagnosis-specific. Your generated states MUST reflect these pathways:
+
+{branching_context}
+
+{comorbidity_context}
+
+{time_pressure_context}
 
 ### Generate a JSON object with EVERY field below populated:
 
@@ -645,11 +657,34 @@ class CaseEngine:
                               clinical_plan: Dict[str, Any]) -> Dict[str, Any]:
         """
         Phase 2: Generate all 96 case fields, guided by the clinical
-        reasoning plan from Phase 1.
+        reasoning plan from Phase 1 and diagnosis-specific branching.
         """
         custom_section = ""
         if config.custom_focus:
             custom_section = f"- Custom Instructions: {config.custom_focus}"
+
+        # Build diagnosis-specific branching context
+        branching_engine = BranchingEngine()
+        branching_context = branching_engine.build_prompt_injection(
+            config.diagnosis, config.difficulty
+        )
+        self._log(f"Branching context injected ({len(branching_context)} chars)")
+
+        # Build comorbidity context
+        comorbidity_context = ""
+        if config.comorbidities:
+            comorbidity_engine = ComorbidityEngine()
+            effect = comorbidity_engine.compute_effects(
+                config.diagnosis, config.comorbidities
+            )
+            comorbidity_context = effect.prompt_context
+            self._log(f"Comorbidity context injected: {', '.join(config.comorbidities)}")
+
+        # Build time-pressure context
+        time_engine = TimePressureEngine()
+        timeline = time_engine.build_timeline(config.diagnosis, config.difficulty)
+        time_pressure_context = timeline.prompt_context
+        self._log(f"Time-pressure context injected ({timeline.total_duration_minutes} min scenario)")
 
         prompt = PHASE2_PROMPT.format(
             clinical_plan=json.dumps(clinical_plan, indent=2),
@@ -658,7 +693,10 @@ class CaseEngine:
             gender=config.patient_gender,
             difficulty=config.difficulty,
             target_learner=config.target_learner,
-            custom_section=custom_section
+            custom_section=custom_section,
+            branching_context=branching_context,
+            comorbidity_context=comorbidity_context,
+            time_pressure_context=time_pressure_context
         )
 
         response = self.model.generate_content(

@@ -27,7 +27,7 @@ load_dotenv()
 
 # Import custom modules
 from state_manager import SimulationStateManager
-from logic_controller import MedicalLogicController, Difficulty, CCS5Level
+from logic_controller import MedicalLogicController, Difficulty, CCS5Level, LabValidator, DrugDosingValidator, PerformanceScorer
 from airtable_client import AirtableClient
 from validators import CaseValidator, ValidationResult
 from utils import (
@@ -62,6 +62,49 @@ st.set_page_config(
 # See .env.example for required setup
 # On Streamlit Cloud: Use Settings → Secrets tab to add keys
 # Locally: Use .env file
+
+import re as _re
+
+def _split_pathways(text: str) -> tuple:
+    """
+    Split text into (positive_portion, negative_portion) using pathway markers.
+    Looks for GOOD PATH / BAD PATH, POSITIVE PATH / NEGATIVE PATH,
+    or if-treated / if-untreated patterns. Returns (text, '') if no split found.
+    """
+    if not text:
+        return ("", "")
+
+    # Try structured markers first: "GOOD PATH:" / "BAD PATH:"
+    pattern = _re.compile(
+        r'(?:GOOD\s*PATH|POSITIVE\s*PATH|IF\s*(?:TREATED|INTERVENTION))\s*[:：]\s*(.*?)'
+        r'(?:BAD\s*PATH|NEGATIVE\s*PATH|IF\s*(?:UNTREATED|NO\s*INTERVENTION|MISSED))\s*[:：]\s*(.*)',
+        _re.IGNORECASE | _re.DOTALL
+    )
+    m = pattern.search(text)
+    if m:
+        return (m.group(1).strip().rstrip('.;,'), m.group(2).strip())
+
+    # Try line-based splitting
+    lines = text.replace('\\n', '\n').split('\n')
+    pos_lines, neg_lines = [], []
+    pos_kw = {"improve", "good", "stable", "respond", "positive", "treated", "better", "resolv"}
+    neg_kw = {"deteriorat", "declin", "worsen", "worse", "negative", "untreated", "fail", "decompens", "arrest", "critical"}
+
+    for line in lines:
+        low = line.lower()
+        is_pos = any(kw in low for kw in pos_kw)
+        is_neg = any(kw in low for kw in neg_kw)
+        if is_neg and not is_pos:
+            neg_lines.append(line.strip())
+        elif is_pos:
+            pos_lines.append(line.strip())
+
+    if pos_lines and neg_lines:
+        return ("\n".join(pos_lines), "\n".join(neg_lines))
+
+    return (text, "")
+
+
 def get_secret(key: str, default: str = None) -> Optional[str]:
     """Get secret from Streamlit secrets (Cloud) or environment variables (local)"""
     try:
@@ -253,6 +296,19 @@ def render_configuration_form() -> Optional[Dict[str, Any]]:
             difficulty = _legacy_map[ccs5_value]
         
         st.markdown("### 📝 Advanced Options")
+
+        # --- Comorbidity Selector ---
+        from logic_controller import ComorbidityEngine as _CE
+        _comorb_engine = _CE()
+        _dx_for_comorb = diagnosis.strip() if diagnosis else ""
+        _avail_comorb = _comorb_engine.available_comorbidities(_dx_for_comorb) if _dx_for_comorb else sorted(_CE.UNIVERSAL_COMORBIDITIES.keys())
+        comorbidities = st.multiselect(
+            "Patient Comorbidities (Optional)",
+            options=_avail_comorb,
+            default=[],
+            help="Select comorbidities that will modify lab values, interventions, and case complexity"
+        )
+
         custom_focus = st.text_area(
             "Custom Instructions (Optional)",
             placeholder="e.g., Patient is allergic to penicillin. State 3 should involve sudden hemodynamic changes.",
@@ -274,6 +330,7 @@ def render_configuration_form() -> Optional[Dict[str, Any]]:
             "ccs5_value": ccs5_value,
             "ccs5_label": ccs5_label,
             "custom_focus": custom_focus,
+            "comorbidities": comorbidities,
             "submitted": submitted
         }
 
@@ -431,7 +488,8 @@ def render_complexity_profile(profile: Dict[str, Any]):
 
 def generate_case_with_gemini(diagnosis: str, age: int, gender: str,
                              difficulty: str, custom_focus: str,
-                             ccs5_value: int = 2) -> Dict[str, Any]:
+                             ccs5_value: int = 2,
+                             comorbidities: Optional[list] = None) -> Dict[str, Any]:
     """
     Generate case using Gemini API with proper error handling.
     Now runs a Phase 0 complexity profile before the main case generation.
@@ -488,6 +546,21 @@ def generate_case_with_gemini(diagnosis: str, age: int, gender: str,
     }
     
     # Construct detailed prompt
+    # Build diagnosis-specific branching context
+    from logic_controller import BranchingEngine as _BE, ComorbidityEngine as _CoE, TimePressureEngine as _TPE
+    branching_engine = _BE()
+    branching_text = branching_engine.build_prompt_injection(diagnosis, difficulty)
+
+    comorbidity_text = ""
+    if comorbidities:
+        comorb_engine = _CoE()
+        effect = comorb_engine.compute_effects(diagnosis, comorbidities)
+        comorbidity_text = effect.prompt_context
+
+    time_engine = _TPE()
+    timeline = time_engine.build_timeline(diagnosis, difficulty)
+    time_pressure_text = timeline.prompt_context
+
     prompt = f"""
     Generate a comprehensive medical simulation case for:
     - Diagnosis: {diagnosis}
@@ -497,6 +570,16 @@ def generate_case_with_gemini(diagnosis: str, age: int, gender: str,
     - Custom Notes: {custom_focus if custom_focus else 'None'}
 
     Using the CCS-5 framework, ensure complexity matches {ccs5.description}
+
+    ### Diagnosis-Specific Branching Guide
+    Use this clinical reference for medically accurate state progression:
+
+    {branching_text}
+
+    {comorbidity_text}
+
+    ### Time-Pressure Model
+    {time_pressure_text}
 
     Return ONLY a valid JSON object that fills this exact skeleton: {json.dumps(case_skeleton)}
 
@@ -717,6 +800,74 @@ def display_case_content(case_data: Dict[str, Any], final_diagnosis: str,
     st.markdown("### Validation Report")
     render_validation_results(validation_summary)
 
+    # Show lab validation results (from DiagnosisRegistry)
+    lab_issues = st.session_state.get("lab_issues", [])
+    if lab_issues:
+        errors = [i for i in lab_issues if i.severity == "error"]
+        warnings = [i for i in lab_issues if i.severity == "warning"]
+        st.markdown("### 🧪 Lab Value Validation")
+        if errors:
+            st.error(f"**{len(errors)} lab value(s) critically out of range**")
+            for issue in errors:
+                st.write(f"🔴 **{issue.field_name}** = {issue.value} — expected [{issue.expected_min}–{issue.expected_max}]")
+        if warnings:
+            st.warning(f"**{len(warnings)} lab value(s) outside expected range**")
+            for issue in warnings:
+                st.write(f"🟡 **{issue.field_name}** = {issue.value} — expected [{issue.expected_min}–{issue.expected_max}]")
+    else:
+        st.markdown("### 🧪 Lab Value Validation")
+        st.success("All lab values within expected ranges for this diagnosis.")
+
+    # Show drug dosing validation results
+    drug_issues = st.session_state.get("drug_issues", [])
+    if drug_issues:
+        drug_errors = [i for i in drug_issues if i.severity == "error"]
+        drug_warnings = [i for i in drug_issues if i.severity == "warning"]
+        drug_info = [i for i in drug_issues if i.severity == "info"]
+        st.markdown("### 💊 Drug Dosing Validation")
+        if drug_errors:
+            st.error(f"**{len(drug_errors)} dosing error(s) found**")
+            for issue in drug_errors:
+                st.write(f"🔴 **{issue.drug}**: {issue.issue}")
+                st.caption(f"Recommendation: {issue.recommendation}")
+        if drug_warnings:
+            st.warning(f"**{len(drug_warnings)} dosing warning(s)**")
+            for issue in drug_warnings:
+                st.write(f"🟡 **{issue.drug}**: {issue.issue}")
+                st.caption(f"Recommendation: {issue.recommendation}")
+        if drug_info:
+            for issue in drug_info:
+                st.info(f"ℹ️ **{issue.drug}**: {issue.issue} — {issue.recommendation}")
+    else:
+        st.markdown("### 💊 Drug Dosing Validation")
+        st.success("No drug dosing issues detected.")
+
+    # Show performance scoring report
+    perf_report = st.session_state.get("performance_report")
+    if perf_report:
+        st.markdown("### 📊 Case Quality Score")
+        grade_colors = {"A": "#2e7d32", "B": "#1565c0", "C": "#e65100", "D": "#c62828", "F": "#b71c1c"}
+        color = grade_colors.get(perf_report.grade, "#555")
+        st.markdown(
+            f"<div style='background:{color};color:white;padding:12px 20px;"
+            f"border-radius:8px;font-size:20px;display:inline-block;'>"
+            f"<b>{perf_report.overall_score}% — Grade {perf_report.grade}</b></div>",
+            unsafe_allow_html=True
+        )
+        with st.expander("📋 Detailed Scoring Breakdown", expanded=False):
+            for comp in perf_report.components:
+                bar = "█" * comp.score + "░" * (comp.max_score - comp.score)
+                st.markdown(f"**{comp.dimension}** {bar} {comp.score}/{comp.max_score}")
+                if comp.deductions:
+                    for d in comp.deductions:
+                        st.caption(f"  → {d}")
+            if perf_report.strengths:
+                st.success(f"**Strengths:** {', '.join(perf_report.strengths)}")
+            if perf_report.improvement_areas:
+                st.warning("**Areas for Improvement:**")
+                for area in perf_report.improvement_areas:
+                    st.write(f"- {area}")
+
     # -------- COMPLEXITY PROFILE --------
     st.markdown("---")
     st.markdown("## 🧠 Complexity Profile")
@@ -738,47 +889,72 @@ def display_case_content(case_data: Dict[str, Any], final_diagnosis: str,
     for tab, (prefix, label) in zip(state_tabs, state_keys):
         with tab:
             st.markdown(f"**{label}** — {case_data.get(f'{prefix}_name', '')}")
-            vitals_col, pe_col = st.columns(2)
-            with vitals_col:
+
+            # --- Vitals: split GOOD PATH / BAD PATH if present ---
+            vitals_text = case_data.get(f"{prefix}_vitals", "—")
+            positive_vitals, negative_vitals = _split_pathways(vitals_text)
+
+            if negative_vitals:
+                v_good, v_bad = st.columns(2)
+                with v_good:
+                    st.markdown("**Vital Signs — Good Path**")
+                    st.success(positive_vitals)
+                with v_bad:
+                    st.markdown("**Vital Signs — Bad Path**")
+                    st.error(negative_vitals)
+            else:
                 st.markdown("**Vital Signs**")
-                st.info(case_data.get(f"{prefix}_vitals", "—"))
-            with pe_col:
+                st.info(vitals_text)
+
+            # --- PE: split if pathways present ---
+            pe_text = case_data.get(f"{prefix}_pe", "—")
+            positive_pe, negative_pe = _split_pathways(pe_text)
+
+            if negative_pe:
+                pe_good, pe_bad = st.columns(2)
+                with pe_good:
+                    st.markdown("**Physical Exam — Good Path**")
+                    st.success(positive_pe)
+                with pe_bad:
+                    st.markdown("**Physical Exam — Bad Path**")
+                    st.error(negative_pe)
+            else:
                 st.markdown("**Physical Exam**")
-                st.info(case_data.get(f"{prefix}_pe", "—"))
+                st.info(pe_text)
 
-            prog_text = case_data.get(f"{prefix}_prog", "")
-            notes_text = case_data.get(f"{prefix}_notes", "")
+            # --- Actions & Notes ---
             actions_text = case_data.get(f"{prefix}_actions", "")
+            notes_text = case_data.get(f"{prefix}_notes", "")
+            prog_text = case_data.get(f"{prefix}_prog", "")
 
-            pos_col, neg_col = st.columns(2)
-            with pos_col:
-                st.markdown(
-                    "<span style='color:#2e7d32; font-weight:bold;'>✅ Positive Path (Intervention Performed)</span>",
-                    unsafe_allow_html=True
-                )
-                # Extract positive path from prog notes if present
-                positive_text = ""
-                if prog_text:
-                    lines = prog_text.split("\\n")
-                    pos_lines = [l for l in lines if any(
-                        kw in l.lower() for kw in ["improve", "good", "stable", "respond", "positive", "treated"]
-                    )]
-                    positive_text = "\n".join(pos_lines) if pos_lines else prog_text
-                st.success(positive_text or actions_text or "—")
+            if actions_text:
+                st.markdown("**Expected Learner Actions**")
+                st.warning(actions_text)
 
-            with neg_col:
-                st.markdown(
-                    "<span style='color:#c62828; font-weight:bold;'>❌ Negative Path (No Intervention)</span>",
-                    unsafe_allow_html=True
-                )
-                negative_text = ""
-                if prog_text:
-                    lines = prog_text.split("\\n")
-                    neg_lines = [l for l in lines if any(
-                        kw in l.lower() for kw in ["deteriorat", "declin", "worsen", "worse", "negative", "untreated", "fail"]
-                    )]
-                    negative_text = "\n".join(neg_lines) if neg_lines else ""
-                st.error(negative_text or notes_text or "—")
+            # --- Operator Notes: split branching if present ---
+            positive_notes, negative_notes = _split_pathways(notes_text)
+            if negative_notes:
+                n_good, n_bad = st.columns(2)
+                with n_good:
+                    st.markdown(
+                        "<span style='color:#2e7d32; font-weight:bold;'>✅ If Intervention Performed</span>",
+                        unsafe_allow_html=True
+                    )
+                    st.success(positive_notes)
+                with n_bad:
+                    st.markdown(
+                        "<span style='color:#c62828; font-weight:bold;'>❌ If Intervention Missed</span>",
+                        unsafe_allow_html=True
+                    )
+                    st.error(negative_notes)
+            elif notes_text:
+                st.markdown("**Operator Notes**")
+                st.info(notes_text)
+
+            # --- Progression Trigger ---
+            if prog_text:
+                st.markdown("**Progression Trigger**")
+                st.caption(prog_text)
     
     # -------- STAGE 4: EXPORT & SYNC --------
     st.markdown("---")
@@ -830,6 +1006,15 @@ def display_case_content(case_data: Dict[str, Any], final_diagnosis: str,
                     st.write(f"{color} **{result.field_name}**: {result.message}")
             else:
                 st.info("No validation issues found")
+
+            # Append lab validation issues to debug panel
+            debug_lab = st.session_state.get("lab_issues", [])
+            if debug_lab:
+                st.markdown("---")
+                st.write("**Lab Validation (DiagnosisRegistry)**")
+                for issue in debug_lab:
+                    icon = "🔴" if issue.severity == "error" else "🟡"
+                    st.write(f"{icon} {issue.message}")
         
         with tab3:
             gen_log = state_mgr.get_generation_log()
@@ -899,7 +1084,8 @@ def main():
             form_data["patient_gender"],
             form_data["difficulty"],
             form_data["custom_focus"],
-            ccs5_value=form_data.get("ccs5_value", 2)
+            ccs5_value=form_data.get("ccs5_value", 2),
+            comorbidities=form_data.get("comorbidities", [])
         )
         progress_bar.progress(50, text="50% — AI generation complete, post-processing...")
         phase_status.info("🔬 **Post-processing** — Applying medical logic, populating Section 7...")
@@ -962,6 +1148,32 @@ def main():
         validator = CaseValidator()
         is_valid, validation_results = validator.validate_complete_case(case_data)
         validation_summary = validator.get_validation_summary()
+
+        # Step 3b: Lab validation against diagnosis-specific expected ranges
+        progress_bar.progress(85, text="85% — Validating lab values against diagnosis ranges...")
+        phase_status.info("🧪 **Lab Validation** — Checking AI-generated labs against expected ranges for " + final_diagnosis + "...")
+        lab_validator = LabValidator()
+        lab_issues = lab_validator.validate(case_data, final_diagnosis)
+        st.session_state["lab_issues"] = lab_issues
+
+        # Step 3c: Drug dosing validation
+        progress_bar.progress(88, text="88% — Validating medication dosing...")
+        phase_status.info("💊 **Drug Dosing Check** — Scanning for dosing issues and contraindications...")
+        drug_validator = DrugDosingValidator()
+        drug_issues = drug_validator.validate_case(
+            case_data, comorbidities=form_data.get("comorbidities", [])
+        )
+        st.session_state["drug_issues"] = drug_issues
+
+        # Step 3d: Performance scoring
+        progress_bar.progress(92, text="92% — Scoring case quality...")
+        phase_status.info("📊 **Performance Scoring** — Evaluating case across 10 quality dimensions...")
+        perf_scorer = PerformanceScorer()
+        perf_report = perf_scorer.score_case(
+            case_data, final_diagnosis, form_data["difficulty"],
+            lab_issues=lab_issues, drug_issues=drug_issues
+        )
+        st.session_state["performance_report"] = perf_report
         
         # Store in session state (also cache case_name for header)
         state_mgr.set_case_data(case_data)

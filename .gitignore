@@ -66,3 +66,8 @@ output/
 exports/
 *.json
 .env.production
+
+# Build/batch scripts (registry builders)
+batch_*.py
+build_registry.py
+test_airtable.py
