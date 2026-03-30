@@ -193,6 +193,123 @@ Instructions:
 - The chain_of_thought should mirror how an expert would actually reason through this case"""
 
 
+DEBRIEF_PROMPT = """## Task: Generate a Structured Simulation Debrief Facilitator Guide
+
+You are an expert simulation debriefer using the **PEARLS** (Promoting Excellence And Reflective Learning in Simulation) framework — the current gold standard for healthcare simulation debriefing.
+
+### The Generated Case:
+{case_summary}
+
+### Case Metadata:
+- Diagnosis: {diagnosis}
+- Target Learner: {target_learner}
+- CCS-5 Level: {ccs5_label}
+- Critical Actions: {critical_actions}
+- Debrief Questions (from case): {debrief_questions}
+- Educational Objectives: {ed_objectives}
+
+### Complexity Profile Context:
+- Cognitive Biases at Risk: {cognitive_biases}
+- Uncertainty Type: {uncertainty_type}
+- Chain of Thought (expert reasoning): {chain_of_thought}
+
+**Return ONLY a valid JSON object with this structure:**
+
+{{
+  "pearls_script": {{
+    "reactions": {{
+      "opening_prompt": "Exact facilitator opening question for the reactions phase (open-ended, emotionally validating)",
+      "follow_up_prompts": ["2-3 follow-up prompts to explore initial reactions and emotional responses"],
+      "facilitator_notes": "Tips for the facilitator on managing the reactions phase — what to watch for"
+    }},
+    "description": {{
+      "summary_prompt": "Facilitator prompt asking learners to summarize what happened",
+      "clarifying_questions": ["2-3 targeted questions to establish a shared mental model of events"],
+      "key_facts_to_establish": ["3-5 critical facts the learners should identify during this phase"]
+    }},
+    "analysis": {{
+      "advocacy_inquiry_pairs": [
+        {{
+          "observation": "What the facilitator observed (a specific learner action or decision)",
+          "advocacy": "The facilitator's perspective on why this matters clinically",
+          "inquiry": "The open-ended question to explore the learner's thinking",
+          "teaching_point": "The clinical pearl or principle this discussion should reveal"
+        }}
+      ],
+      "critical_decision_explorations": [
+        {{
+          "decision_point": "A specific critical decision from the case (tied to a state transition)",
+          "if_done_well": "How to reinforce this as a strength",
+          "if_missed": "How to explore this gap without blame (using curiosity)",
+          "clinical_rationale": "Why this decision matters for patient outcomes"
+        }}
+      ]
+    }},
+    "application": {{
+      "takeaway_prompt": "Facilitator prompt for learners to identify key takeaways",
+      "transfer_questions": ["2-3 questions helping learners connect this case to real practice"],
+      "commitment_prompt": "Final prompt asking learners to commit to one behavior change"
+    }}
+  }},
+  "competency_alignment": [
+    {{
+      "competency_domain": "ACGME/AACN competency domain name (e.g., Patient Care, Medical Knowledge, Systems-Based Practice, Interprofessional Collaboration, etc.)",
+      "specific_competency": "Specific competency statement",
+      "how_case_addresses": "How this specific case tests/develops this competency",
+      "observable_behaviors": ["2-3 observable behaviors that demonstrate competency"]
+    }}
+  ],
+  "anticipated_learner_errors": [
+    {{
+      "error": "Specific error learners at this level commonly make with this diagnosis",
+      "why_it_happens": "Cognitive or knowledge-based explanation (tie to biases if applicable)",
+      "clinical_consequence": "What would happen to the patient if this error occurs in real life",
+      "facilitator_response": "How the facilitator should address this in debriefing — use curiosity, not correction",
+      "prevention_strategy": "Teaching point or mental model that prevents this error"
+    }}
+  ],
+  "assessment_rubric": {{
+    "scoring_dimensions": [
+      {{
+        "dimension": "Scoring dimension name (e.g., Situation Recognition, Team Communication, Critical Interventions)",
+        "weight": "Percentage weight of total score",
+        "exemplary": "Description of exemplary performance (meets all expectations)",
+        "proficient": "Description of proficient performance (meets most expectations)",
+        "developing": "Description of developing performance (partially meets expectations)",
+        "novice": "Description of novice performance (does not meet expectations)",
+        "observable_indicators": ["Specific observable behaviors for this dimension"]
+      }}
+    ],
+    "global_rating_anchors": {{
+      "1_novice": "Unable to recognize the clinical problem or initiate appropriate management",
+      "2_developing": "Recognizes the problem but requires significant prompting to manage appropriately",
+      "3_proficient": "Manages the case with minimal prompting; demonstrates sound clinical reasoning",
+      "4_exemplary": "Manages the case independently with excellent team communication and anticipatory thinking"
+    }}
+  }},
+  "facilitator_preparation": {{
+    "emotional_safety_notes": "Specific notes on psychological safety for this case — what might trigger strong reactions",
+    "common_facilitator_pitfalls": ["2-3 common mistakes facilitators make when debriefing this type of case"],
+    "time_allocation": {{
+      "reactions_minutes": 3,
+      "description_minutes": 5,
+      "analysis_minutes": 15,
+      "application_minutes": 5,
+      "total_minutes": 28
+    }},
+    "pre_brief_talking_points": ["3-4 key points to cover in the pre-brief before the simulation starts"]
+  }}
+}}
+
+Instructions:
+- The PEARLS script should be ready-to-use — a facilitator should be able to read it and run the debrief
+- Advocacy-inquiry pairs MUST reference specific moments/decisions in the case states (S1-S5)
+- Anticipated errors should be specific to the diagnosis AND the learner level
+- Assessment rubric should cover 4-6 dimensions that matter for THIS case
+- All content must be evidence-based and aligned with simulation best practices (INACSL Standards, Jeffries Simulation Theory)
+- Use inclusive, psychologically safe language throughout"""
+
+
 PHASE1_PROMPT = """## Task: Clinical Reasoning Plan
 
 Before generating a full simulation case, I need you to think through the clinical scenario deeply. This plan will guide the full case generation.
