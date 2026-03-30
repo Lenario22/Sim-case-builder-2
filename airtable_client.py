@@ -353,7 +353,7 @@ class AirtableClient:
                 else:
                     try:
                         error_body = response.json()
-                    except:
+                    except ValueError:
                         error_body = {"error": {"message": response.text}}
                     
                     error_type, error_msg = self._classify_error(

@@ -7,7 +7,8 @@ The brain of the Sim Case Builder. Uses a three-phase AI pipeline:
   Phase 3: Clinical Self-Review — AI audits its own work for inconsistencies
 """
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types as genai_types
 import json
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
@@ -490,12 +491,23 @@ class CaseEngine:
             api_key: Gemini API key
             model_name: Which Gemini model to use
         """
-        genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel(
-            model_name,
-            system_instruction=SYSTEM_PROMPT
-        )
+        self._client = genai.Client(api_key=api_key)
+        self._model_name = model_name
+        self._system_instruction = SYSTEM_PROMPT
         self.log: List[str] = []
+
+    def _call_model(self, prompt: str, json_mode: bool = True) -> str:
+        """Call the Gemini model and return the raw response text."""
+        config = genai_types.GenerateContentConfig(
+            systemInstruction=self._system_instruction,
+            responseMimeType="application/json" if json_mode else None,
+        )
+        response = self._client.models.generate_content(
+            model=self._model_name,
+            contents=prompt,
+            config=config,
+        )
+        return response.text
 
     def _resolve_ccs5(self, config: CaseConfig) -> CCS5Level:
         """Resolve the CCS-5 level from either explicit setting or legacy difficulty string."""
@@ -592,11 +604,8 @@ class CaseEngine:
         )
 
         try:
-            response = self.model.generate_content(
-                prompt,
-                generation_config={"response_mime_type": "application/json"}
-            )
-            return self._parse_json_response(response.text)
+            text = self._call_model(prompt)
+            return self._parse_json_response(text)
         except Exception as e:
             self._log(f"Phase 0 failed (non-critical): {str(e)}")
             return {"ccs5_level": ccs5.value, "dreyfus_stage": ccs5.label,
@@ -641,12 +650,8 @@ class CaseEngine:
             complexity_context=complexity_context
         )
 
-        response = self.model.generate_content(
-            prompt,
-            generation_config={"response_mime_type": "application/json"}
-        )
-
-        plan = self._parse_json_response(response.text)
+        text = self._call_model(prompt)
+        plan = self._parse_json_response(text)
         return plan
 
     # ------------------------------------------------------------------
@@ -699,12 +704,8 @@ class CaseEngine:
             time_pressure_context=time_pressure_context
         )
 
-        response = self.model.generate_content(
-            prompt,
-            generation_config={"response_mime_type": "application/json"}
-        )
-
-        case_data = self._parse_json_response(response.text)
+        text = self._call_model(prompt)
+        case_data = self._parse_json_response(text)
         return case_data
 
     # ------------------------------------------------------------------
@@ -727,12 +728,8 @@ class CaseEngine:
         )
 
         try:
-            response = self.model.generate_content(
-                prompt,
-                generation_config={"response_mime_type": "application/json"}
-            )
-
-            review = self._parse_json_response(response.text)
+            text = self._call_model(prompt)
+            review = self._parse_json_response(text)
             review_notes = review.get("overall_assessment", "Review complete")
             corrections = review.get("corrections", {})
 

@@ -11,7 +11,8 @@ This application demonstrates enterprise-level architecture:
 """
 
 import streamlit as st
-import google.generativeai as genai
+from google import genai
+from google.genai import types as genai_types
 import json
 import io
 import os
@@ -134,6 +135,20 @@ if not GEMINI_API_KEY or GEMINI_API_KEY == "your_gemini_api_key_here":
 # Template file path
 TEMPLATE_PATH = Path(__file__).parent / "Simulation Case Template_2025.docx"
 
+# Startup health checks
+_startup_issues = []
+if not TEMPLATE_PATH.exists():
+    _startup_issues.append(
+        f"**Word template missing:** `{TEMPLATE_PATH.name}` — Word export will be unavailable."
+    )
+if not AIRTABLE_API_KEY or AIRTABLE_API_KEY == "your_airtable_pat_here":
+    _startup_issues.append(
+        "**Airtable PAT not configured** — Airtable sync will be unavailable."
+    )
+if _startup_issues:
+    for issue in _startup_issues:
+        st.warning(f"⚠️ {issue}", icon="⚠️")
+
 
 # ============================================================================
 # STATE INITIALIZATION
@@ -243,11 +258,16 @@ def render_configuration_form() -> Optional[Dict[str, Any]]:
         
         with col1:
             st.subheader("Patient Demographics")
-            diagnosis = st.text_input(
+            from logic_controller import DiagnosisRegistry as _DR
+            _registry = _DR()
+            _all_dx = ["🎲 Random Diagnosis"] + sorted(_registry.all_diagnoses)
+            _selected_dx = st.selectbox(
                 "Primary Diagnosis",
-                placeholder="e.g., Sepsis, Myocardial Infarction",
-                help="Leave blank for random diagnosis"
+                options=_all_dx,
+                index=0,
+                help="Choose from 351 registry diagnoses or select Random"
             )
+            diagnosis = "" if _selected_dx.startswith("🎲") else _selected_dx
             
             patient_age = st.number_input(
                 "Patient Age",
@@ -594,8 +614,10 @@ def generate_case_with_gemini(diagnosis: str, age: int, gender: str,
     """
 
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        json_config = genai_types.GenerateContentConfig(
+            responseMimeType="application/json",
+        )
 
         # Phase 0: Complexity Profile
         phase0_prompt = PHASE0_PROMPT.format(
@@ -605,9 +627,10 @@ def generate_case_with_gemini(diagnosis: str, age: int, gender: str,
             custom_section=custom_section
         )
         try:
-            p0_response = model.generate_content(
-                phase0_prompt,
-                generation_config={"response_mime_type": "application/json"}
+            p0_response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=phase0_prompt,
+                config=json_config,
             )
             _, complexity_profile = validate_json_string(p0_response.text)
             if not isinstance(complexity_profile, dict):
@@ -616,9 +639,10 @@ def generate_case_with_gemini(diagnosis: str, age: int, gender: str,
             complexity_profile = {"ccs5_level": ccs5.value, "dreyfus_stage": ccs5.label}
 
         # Main case generation
-        response = model.generate_content(
-            prompt,
-            generation_config={"response_mime_type": "application/json"}
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=json_config,
         )
 
         # Parse response
@@ -880,6 +904,40 @@ def display_case_content(case_data: Dict[str, Any], final_diagnosis: str,
     # -------- PATIENT STATE PROGRESSION (tabbed branching view) --------
     st.markdown("---")
     st.markdown("## 🔀 Patient State Progression")
+
+    # --- Branching Flowchart ---
+    _state_labels = [
+        ("S1", case_data.get("s1_name", "Arrival")),
+        ("S2", case_data.get("s2_name", "Early Changes")),
+        ("S3", case_data.get("s3_name", "Critical Decision")),
+        ("S4", case_data.get("s4_name", "Response")),
+        ("S5", case_data.get("s5_name", "Resolution")),
+    ]
+    def _safe_mermaid(text: str) -> str:
+        """Escape text for Mermaid labels."""
+        return text.replace('"', "'").replace("\n", " ").replace("[", "(").replace("]", ")")[:60]
+
+    mermaid_lines = ["graph TD"]
+    for i, (sid, name) in enumerate(_state_labels):
+        safe = _safe_mermaid(name) if name else f"State {i+1}"
+        mermaid_lines.append(f'    {sid}["{sid}: {safe}"]')
+    # Linear progression
+    for i in range(len(_state_labels) - 1):
+        sid_a = _state_labels[i][0]
+        sid_b = _state_labels[i + 1][0]
+        mermaid_lines.append(f"    {sid_a} -->|Intervention| {sid_b}")
+    # Bad path branches from S3
+    mermaid_lines.append('    S3 -->|"Missed / Delayed"| BAD["⚠️ Decompensation"]')
+    mermaid_lines.append('    BAD -->|"Rescue"| S4')
+    # Styling
+    mermaid_lines.append("    style S1 fill:#e3f2fd,stroke:#1565c0")
+    mermaid_lines.append("    style S3 fill:#fff3e0,stroke:#e65100")
+    mermaid_lines.append("    style S5 fill:#e8f5e9,stroke:#2e7d32")
+    mermaid_lines.append("    style BAD fill:#ffebee,stroke:#c62828")
+
+    with st.expander("📊 Branching Flowchart", expanded=True):
+        st.markdown("```mermaid\n" + "\n".join(mermaid_lines) + "\n```")
+
     state_tabs = st.tabs(["State 1", "State 2", "State 3", "State 4", "State 5"])
     state_keys = [("s1", "Arrival / Initial Presentation"),
                   ("s2", "Early Changes"),
@@ -1198,14 +1256,13 @@ def main():
                                         "Case exported successfully")
         
     except Exception as e:
+        progress_bar.empty()
+        phase_status.empty()
         st.error(f"❌ Generation Error: {str(e)}")
         
         with st.expander("🤓 Debug: Full Error Details"):
-            try:
-                # Try to show raw AI output if available
-                st.write("Raw API Response (if available in error context)")
-            except:
-                st.write("No additional debug information available")
+            st.write(f"**Error type:** `{type(e).__name__}`")
+            st.write(f"**Message:** {str(e)}")
 
 
 if __name__ == "__main__":
