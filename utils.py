@@ -526,18 +526,18 @@ def auto_populate_critical_actions(case_data: Dict[str, Any]) -> Dict[str, Any]:
 
 def clean_data_structure(data: Any) -> Any:
     """
-    Recursively clean a data structure by formatting all string values.
-    Removes problematic characters, template noise, and formats nested structures.
+    Recursively clean a data structure, preserving lists and dicts.
+    Only applies text formatting to string leaf values.
 
     Args:
         data: Dictionary or other data structure to clean
 
     Returns:
-        Cleaned version of the input
+        Cleaned version of the input (lists stay as lists)
     """
     if isinstance(data, dict):
         return {
-            k: clean_data_structure(format_for_humans(v))
+            k: clean_data_structure(v)
             for k, v in data.items()
         }
     elif isinstance(data, list):

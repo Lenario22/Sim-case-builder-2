@@ -13,6 +13,7 @@ This application demonstrates enterprise-level architecture:
 import streamlit as st
 from google import genai
 from google.genai import types as genai_types
+import streamlit.components.v1 as components
 import json
 import io
 import os
@@ -23,12 +24,13 @@ from docxtpl import DocxTemplate
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load .env file immediately
-load_dotenv()
+# Load .env file immediately (use explicit path so it works regardless of cwd)
+load_dotenv(Path(__file__).parent / ".env")
 
 # Import custom modules
 from state_manager import SimulationStateManager
 from logic_controller import MedicalLogicController, Difficulty, CCS5Level, LabValidator, DrugDosingValidator, PerformanceScorer
+from case_engine import CaseEngine, CaseConfig, CaseResult, DEBRIEF_PROMPT
 from airtable_client import AirtableClient
 from validators import CaseValidator, ValidationResult
 from utils import (
@@ -250,6 +252,20 @@ def get_state_manager() -> SimulationStateManager:
 state_mgr = get_state_manager()
 
 
+@st.cache_resource
+def get_diagnosis_registry():
+    """Cache the 351-diagnosis registry so it's not rebuilt on every rerun."""
+    from logic_controller import DiagnosisRegistry
+    return DiagnosisRegistry()
+
+
+@st.cache_resource
+def get_comorbidity_engine():
+    """Cache the comorbidity engine."""
+    from logic_controller import ComorbidityEngine
+    return ComorbidityEngine()
+
+
 # ============================================================================
 # UI STYLING & LAYOUT COMPONENTS
 # ============================================================================
@@ -411,8 +427,7 @@ def render_configuration_form() -> Optional[Dict[str, Any]]:
         
         with col1:
             st.subheader("Patient Demographics")
-            from logic_controller import DiagnosisRegistry as _DR
-            _registry = _DR()
+            _registry = get_diagnosis_registry()
             _all_dx = ["🎲 Random Diagnosis"] + sorted(_registry.all_diagnoses) + ["✏️ Type my own..."]
             _selected_dx = st.selectbox(
                 "Primary Diagnosis",
@@ -479,10 +494,9 @@ def render_configuration_form() -> Optional[Dict[str, Any]]:
         st.markdown("### 📝 Advanced Options")
 
         # --- Comorbidity Selector ---
-        from logic_controller import ComorbidityEngine as _CE
-        _comorb_engine = _CE()
+        _comorb_engine = get_comorbidity_engine()
         _dx_for_comorb = diagnosis.strip() if diagnosis else ""
-        _avail_comorb = _comorb_engine.available_comorbidities(_dx_for_comorb) if _dx_for_comorb else sorted(_CE.UNIVERSAL_COMORBIDITIES.keys())
+        _avail_comorb = _comorb_engine.available_comorbidities(_dx_for_comorb) if _dx_for_comorb else sorted(_comorb_engine.UNIVERSAL_COMORBIDITIES.keys())
         comorbidities = st.multiselect(
             "Patient Comorbidities (Optional)",
             options=_avail_comorb,
@@ -664,161 +678,60 @@ def render_complexity_profile(profile: Dict[str, Any]):
 
 
 # ============================================================================
-# CASE GENERATION ENGINE
+# CASE GENERATION ENGINE — Uses the proper multi-phase CaseEngine
 # ============================================================================
 
 def generate_case_with_gemini(diagnosis: str, age: int, gender: str,
                              difficulty: str, custom_focus: str,
+                             target_learner: str = "Not specified",
                              ccs5_value: int = 2,
-                             comorbidities: Optional[list] = None) -> Dict[str, Any]:
+                             comorbidities: Optional[list] = None,
+                             progress_callback=None) -> CaseResult:
     """
-    Generate case using Gemini API with proper error handling.
-    Now runs a Phase 0 complexity profile before the main case generation.
+    Generate a case using the multi-phase CaseEngine pipeline.
+
+    Phases:
+      0: Complexity Profiling (Vector Model, CCFs, cognitive biases)
+      1: Clinical Reasoning Plan (pathophysiology, timeline, interventions)
+      2: Full Case Generation (96 fields, guided by Phase 1)
+      3: Clinical Self-Review (AI audits its own work and corrects issues)
 
     Args:
         diagnosis: Primary diagnosis
         age: Patient age
         gender: Patient gender
-        difficulty: Legacy difficulty string (for template)
+        difficulty: Legacy difficulty string
         custom_focus: Custom instructions
-        ccs5_value: CCS-5 level (1-5, Dreyfus Model)
+        ccs5_value: CCS-5 level (1-5)
+        comorbidities: List of comorbid conditions
+        progress_callback: Optional callable(pct, text) for progress updates
 
     Returns:
-        Parsed case data dictionary (with _complexity_profile embedded)
+        CaseResult with case_data, clinical_plan, complexity_profile, review_notes
     """
-    from case_engine import PHASE0_PROMPT
-    from logic_controller import CCS5Level as _CCS5
+    config = CaseConfig(
+        diagnosis=diagnosis,
+        patient_age=age,
+        patient_gender=gender,
+        difficulty=difficulty,
+        target_learner=target_learner,
+        custom_focus=custom_focus,
+        ccs5_level=ccs5_value,
+        comorbidities=comorbidities or [],
+    )
 
-    ccs5 = _CCS5(max(1, min(5, ccs5_value)))
-    custom_section = f"- Custom Instructions: {custom_focus}" if custom_focus else ""
+    engine = CaseEngine(api_key=GEMINI_API_KEY)
 
-    # Build case skeleton
-    case_skeleton = {
-        "case_name": "", "key_words": "", "case_summary": "", "age": "",
-        "setting": "", "demographics": "", "organ_system": "", "procedures": "",
-        "ed_objectives": "", "target_learner": "", "location": "", "staff": "",
-        "vignette": "", "room": "", "manikin": "", "moulage": "", "equipment": "",
-        "iv": "", "ae": "", "antib": "", "vps": "", "other_meds": "", "tele_rythm": "",
-        "o2_sat": "", "blood_pressure": "", "respirations": "", "temperature": "",
-        "arrival_condition": "", "pt_name": "", "gender": "", "weight": "",
-        "chief_complaint": "", "arrival_method": "", "hpi": "", "pmh": "", "psh": "",
-        "fmh": "", "social_history": "", "medications": "", "allergies": "",
-        "birth_history": "", "code_status": "", "neuro_ros": "", "msk_ros": "",
-        "heent_ros": "", "endo_ros": "", "cv_ros": "", "heme_ros": "", "resp_ros": "",
-        "skin_ros": "", "gi_ros": "", "psych_ros": "", "gu_ros": "", "general_ros": "",
-        "hr_arrive": "", "bp_arrive": "", "rr_arrive": "", "o2_arrive": "",
-        "temp_arrive": "", "rhythm_arrive": "", "glucose_arrive": "", "gcs_arrive": "",
-        "general_pe": "", "neuro_pe": "", "heent_pe": "", "cv_pe": "", "resp_pe": "",
-        "abd_pe": "", "gu_pe": "", "msk_pe": "", "skin_pe": "", "psych_pe": "",
-        "s1_name": "", "s1_vitals": "", "s1_pe": "", "s1_actions": "", "s1_notes": "",
-        "s1_prog": "", "s2_name": "", "s2_vitals": "", "s2_pe": "", "s2_actions": "",
-        "s2_notes": "", "s2_prog": "", "s3_name": "", "s3_vitals": "", "s3_pe": "",
-        "s3_actions": "", "s3_notes": "", "s3_prog": "", "s4_name": "", "s4_vitals": "",
-        "s4_pe": "", "s4_actions": "", "s4_notes": "", "s4_prog": "", "s5_name": "",
-        "s5_vitals": "", "s5_pe": "", "s5_actions": "", "s5_notes": "", "s5_prog": "",
-        "wbc": "", "hgb": "", "hct": "", "plt": "", "na": "", "k": "", "cl": "",
-        "hco3": "", "ag": "", "bun": "", "cr": "", "glu": "", "ast": "", "alt": "",
-        "alk_phos": "", "t_bili": "", "lipase": "", "ca": "", "mg": "", "phos": "",
-        "alb": "", "vbg_ph": "", "vbg_pco2": "", "vbg_po2": "", "vbg_hco3": "",
-        "lactate": "", "ua_color": "", "ua_clarity": "", "ua_prot": "", "ua_glu": "",
-        "ua_ketones": "", "troponin": "", "tsh": "", "t4": "",
-        "critical_actions": ["", ""], "debrief_questions": ["", ""],
-        "references": ["", ""]
-    }
-    
-    # Construct detailed prompt
-    # Build diagnosis-specific branching context
-    from logic_controller import BranchingEngine as _BE, ComorbidityEngine as _CoE, TimePressureEngine as _TPE
-    branching_engine = _BE()
-    branching_text = branching_engine.build_prompt_injection(diagnosis, difficulty)
+    # Run the full 4-phase pipeline
+    result = engine.generate(config)
 
-    comorbidity_text = ""
-    if comorbidities:
-        comorb_engine = _CoE()
-        effect = comorb_engine.compute_effects(diagnosis, comorbidities)
-        comorbidity_text = effect.prompt_context
+    # Clean the data structure (preserves lists now)
+    result.case_data = clean_data_structure(result.case_data)
 
-    time_engine = _TPE()
-    timeline = time_engine.build_timeline(diagnosis, difficulty)
-    time_pressure_text = timeline.prompt_context
+    # Embed complexity profile for downstream use
+    result.case_data["_complexity_profile"] = result.complexity_profile
 
-    prompt = f"""
-    Generate a comprehensive medical simulation case for:
-    - Diagnosis: {diagnosis}
-    - Patient Age: {age}
-    - Patient Gender: {gender}
-    - Difficulty Level: {difficulty} (CCS-5: {ccs5.label})
-    - Custom Notes: {custom_focus if custom_focus else 'None'}
-
-    Using the CCS-5 framework, ensure complexity matches {ccs5.description}
-
-    ### Diagnosis-Specific Branching Guide
-    Use this clinical reference for medically accurate state progression:
-
-    {branching_text}
-
-    {comorbidity_text}
-
-    ### Time-Pressure Model
-    {time_pressure_text}
-
-    Return ONLY a valid JSON object that fills this exact skeleton: {json.dumps(case_skeleton)}
-
-    CRITICAL FORMATTING RULES:
-    1. If a string value must contain a double quote, escape it with a backslash: \"
-    2. Use \\n for line breaks within string values — NO literal newlines inside strings
-    3. Lab values (CBC, BMP, LFTs) MUST be numeric only (no units)
-    4. Create dynamic 5-state branching: worse if interventions missed, better if done
-    5. Ensure critical_actions and debrief_questions are non-empty arrays, never empty strings
-
-    Ensure clinical accuracy and scenario completeness for {ccs5.label}.
-    """
-
-    try:
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        json_config = genai_types.GenerateContentConfig(
-            responseMimeType="application/json",
-        )
-
-        # Phase 0: Complexity Profile
-        phase0_prompt = PHASE0_PROMPT.format(
-            diagnosis=diagnosis, age=age, gender=gender,
-            ccs5_label=ccs5.label, ccs5_description=ccs5.description,
-            ccs5_value=ccs5.value, target_learner="Not specified",
-            custom_section=custom_section
-        )
-        try:
-            p0_response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=phase0_prompt,
-                config=json_config,
-            )
-            _, complexity_profile = validate_json_string(p0_response.text)
-            if not isinstance(complexity_profile, dict):
-                complexity_profile = {}
-        except Exception:
-            complexity_profile = {"ccs5_level": ccs5.value, "dreyfus_stage": ccs5.label}
-
-        # Main case generation
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-            config=json_config,
-        )
-
-        # Parse response
-        is_valid, parsed = validate_json_string(response.text)
-
-        if not is_valid:
-            raise ValueError(f"JSON parsing failed: {parsed}")
-
-        # Clean and embed complexity profile
-        cleaned = clean_data_structure(parsed)
-        cleaned["_complexity_profile"] = complexity_profile
-        return cleaned
-
-    except Exception as e:
-        raise Exception(f"Gemini generation failed: {str(e)}")
+    return result
 
 
 # ============================================================================
@@ -838,7 +751,7 @@ def generate_debrief_guide(case_data: Dict[str, Any],
     facilitator debrief guide with advocacy-inquiry pairs, competency mapping,
     anticipated learner errors, and a scoring rubric.
     """
-    from case_engine import DEBRIEF_PROMPT
+    from case_engine import DEBRIEF_PROMPT, SYSTEM_PROMPT
     from logic_controller import CCS5Level as _CCS5
 
     ccs5 = _CCS5(max(1, min(5, ccs5_value)))
@@ -881,6 +794,7 @@ def generate_debrief_guide(case_data: Dict[str, Any],
 
     client = genai.Client(api_key=GEMINI_API_KEY)
     json_config = genai_types.GenerateContentConfig(
+        systemInstruction=SYSTEM_PROMPT,
         responseMimeType="application/json",
     )
 
@@ -1213,7 +1127,13 @@ def display_case_content(case_data: Dict[str, Any], final_diagnosis: str,
     mermaid_lines.append("    style BAD fill:#ffebee,stroke:#c62828")
 
     with st.expander("📊 Branching Flowchart", expanded=True):
-        st.markdown("```mermaid\n" + "\n".join(mermaid_lines) + "\n```")
+        mermaid_code = "\n".join(mermaid_lines)
+        mermaid_html = f"""
+        <div class="mermaid">{mermaid_code}</div>
+        <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+        <script>mermaid.initialize({{startOnLoad:true, theme:'neutral'}});</script>
+        """
+        components.html(mermaid_html, height=400, scrolling=True)
 
     state_tabs = st.tabs(["State 1", "State 2", "State 3", "State 4", "State 5"])
     state_keys = [("s1", "Arrival / Initial Presentation"),
@@ -1540,7 +1460,12 @@ def display_case_content(case_data: Dict[str, Any], final_diagnosis: str,
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        word_file = export_to_word(case_data, final_diagnosis)
+        # Lazy export: only generate Word doc when download is requested
+        @st.cache_data
+        def _cached_word_export(_case_data_json, _diag):
+            return export_to_word(json.loads(_case_data_json), _diag)
+        _case_json_for_export = json.dumps(case_data, default=str)
+        word_file = _cached_word_export(_case_json_for_export, final_diagnosis)
         if word_file:
             st.download_button(
                 label="⬇️ Download Word Document",
@@ -1650,7 +1575,7 @@ def display_case_content(case_data: Dict[str, Any], final_diagnosis: str,
     # 10. DEBUG PANEL (collapsed)
     # ====================================================================
     with st.expander("🔍 Advanced: Full Case Data & Debug"):
-        tab1, tab2, tab3 = st.tabs(["Raw JSON", "Validation Log", "Generation Log"])
+        tab1, tab2, tab3, tab4 = st.tabs(["Raw JSON", "Validation Log", "Engine Log (4-Phase)", "Generation Log"])
         with tab1:
             st.json(case_data)
         with tab2:
@@ -1669,6 +1594,23 @@ def display_case_content(case_data: Dict[str, Any], final_diagnosis: str,
                     icon = "🔴" if issue.severity == "error" else "🟡"
                     st.write(f"{icon} {issue.message}")
         with tab3:
+            phases = st.session_state.get("phases_completed", 0)
+            st.write(f"**Phases completed:** {phases}/4")
+            review = st.session_state.get("review_notes", "")
+            if review:
+                st.write(f"**Phase 3 Review:** {review}")
+            engine_log = st.session_state.get("engine_log", [])
+            if engine_log:
+                for entry in engine_log:
+                    st.write(f"⚙️ {entry}")
+            else:
+                st.info("No engine log available (legacy generation)")
+            clinical_plan = st.session_state.get("clinical_plan")
+            if clinical_plan:
+                st.markdown("---")
+                st.write("**Phase 1 Clinical Reasoning Plan:**")
+                st.json(clinical_plan)
+        with tab4:
             gen_log = state_mgr.get_generation_log()
             if gen_log:
                 for event in gen_log:
@@ -1710,15 +1652,16 @@ def main():
     state_mgr.apply_state_transition("input", "generating", "User submitted form")
     
     # Resolve random values
-    random_diagnoses = [
+    # Use the full 351-diagnosis registry for random selection
+    _rand_registry = get_diagnosis_registry()
+    _all_rand_dx = _rand_registry.all_diagnoses if _rand_registry.all_diagnoses else [
         "Sepsis", "Myocardial Infarction", "Anaphylaxis",
         "Pulmonary Embolism", "DKA", "Asthma Exacerbation",
         "Stroke", "Pneumonia", "GI Bleed", "CHF Exacerbation",
-        "Overdose", "Seizure", "Pneumothorax", "Meningitis",
     ]
     
     final_diagnosis = form_data["diagnosis"] if form_data["diagnosis"] \
-        else random.choice(random_diagnoses)
+        else random.choice(_all_rand_dx)
     final_age = form_data["patient_age"] if form_data["patient_age"] is not None \
         else random.randint(18, 85)
     
@@ -1727,18 +1670,27 @@ def main():
     phase_status = st.empty()
 
     try:
-        # Step 1: Generate with Gemini (passes CCS-5 level)
+        # Step 1: Generate with CaseEngine (full 4-phase pipeline)
         progress_bar.progress(5, text="5% — Phase 0: Building Vector Model & complexity profile...")
-        phase_status.info("🧬 **Phase 0/3** — Profiling case complexity (Vector Model, CCFs, cognitive biases)...")
-        case_data = generate_case_with_gemini(
+        phase_status.info("🧬 **Phase 0-3** — Running full CaseEngine pipeline (complexity profiling → clinical reasoning → case generation → self-review)...")
+        result = generate_case_with_gemini(
             final_diagnosis,
             final_age,
             form_data["patient_gender"],
             form_data["difficulty"],
             form_data["custom_focus"],
+            target_learner=form_data["target_learner"],
             ccs5_value=form_data.get("ccs5_value", 2),
             comorbidities=form_data.get("comorbidities", [])
         )
+
+        # Extract case data and engine artifacts from CaseResult
+        case_data = result.case_data
+        st.session_state["engine_log"] = result.log
+        st.session_state["clinical_plan"] = result.clinical_plan
+        st.session_state["review_notes"] = result.review_notes
+        st.session_state["phases_completed"] = result.phases_completed
+
         progress_bar.progress(50, text="50% — AI generation complete, post-processing...")
         phase_status.info("🔬 **Post-processing** — Applying medical logic, populating Section 7...")
 
