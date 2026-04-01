@@ -413,14 +413,22 @@ def render_configuration_form() -> Optional[Dict[str, Any]]:
             st.subheader("Patient Demographics")
             from logic_controller import DiagnosisRegistry as _DR
             _registry = _DR()
-            _all_dx = ["🎲 Random Diagnosis"] + sorted(_registry.all_diagnoses)
+            _all_dx = ["🎲 Random Diagnosis"] + sorted(_registry.all_diagnoses) + ["✏️ Type my own..."]
             _selected_dx = st.selectbox(
                 "Primary Diagnosis",
                 options=_all_dx,
                 index=0,
-                help="Choose from 351 registry diagnoses or select Random"
+                help="Choose from 351 registry diagnoses, select Random, or type your own"
             )
-            diagnosis = "" if _selected_dx.startswith("🎲") else _selected_dx
+            if _selected_dx == "✏️ Type my own...":
+                diagnosis = st.text_input(
+                    "Enter your diagnosis",
+                    placeholder="e.g. Diabetic Ketoacidosis",
+                )
+            elif _selected_dx.startswith("🎲"):
+                diagnosis = ""
+            else:
+                diagnosis = _selected_dx
             
             patient_age = st.number_input(
                 "Patient Age",
